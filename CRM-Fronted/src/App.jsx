@@ -1,21 +1,29 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import DashboardLayout from './components/DashboardLayout';
 import Login from './components/Login';
 
 function App() {
-  // Estado para controlar si el usuario está autenticado o no
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  // Estado que verifica si hay una sesión guardada en localStorage al iniciar
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return localStorage.getItem('isAuth') === 'true';
+  });
 
-  // Función que se ejecutará al llenar el formulario
+  // Función para iniciar sesión
   const handleLogin = () => {
+    localStorage.setItem('isAuth', 'true');
     setIsAuthenticated(true);
+  };
+
+  // Función para cerrar sesión
+  const handleLogout = () => {
+    localStorage.removeItem('isAuth');
+    setIsAuthenticated(false);
   };
 
   return (
     <>
-      {/* Operador ternario: Si está autenticado muestra el Dashboard, si no, muestra el Login */}
       {isAuthenticated ? (
-        <DashboardLayout />
+        <DashboardLayout onLogout={handleLogout} />
       ) : (
         <Login onLogin={handleLogin} />
       )}
