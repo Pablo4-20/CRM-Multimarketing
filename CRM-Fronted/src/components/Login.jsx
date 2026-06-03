@@ -6,23 +6,23 @@ const Login = ({ onLogin }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    // Validación temporal para poder probar la interfaz visualmente
+    // Validación temporal para poder probar la interfaz
     if (email && password) {
       onLogin();
     }
   };
 
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#f3f4f6', fontFamily: 'sans-serif' }}>
-      <div style={{ backgroundColor: 'white', padding: '40px', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', width: '100%', maxWidth: '350px' }}>
+    <div className="flex justify-center items-center min-h-screen w-full bg-slate-100 font-sans">
+      <div className="bg-white p-10 rounded-xl shadow-lg w-full max-w-sm border border-slate-100">
         
-        <h2 style={{ textAlign: 'center', marginBottom: '30px', color: '#1f2937' }}>
+        <h2 className="text-center text-2xl font-bold mb-8 text-slate-800">
           Iniciar Sesión
         </h2>
         
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
           <div>
-            <label style={{ display: 'block', marginBottom: '8px', color: '#4b5563', fontSize: '14px', fontWeight: 'bold' }}>
+            <label className="block mb-2 text-sm font-bold text-slate-600">
               Correo Electrónico
             </label>
             <input 
@@ -30,13 +30,13 @@ const Login = ({ onLogin }) => {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="admin@crm.com"
-              style={{ width: '100%', padding: '12px', borderRadius: '6px', border: '1px solid #d1d5db', boxSizing: 'border-box', outline: 'none' }}
+              className="w-full p-3 rounded-lg border border-slate-300 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
               required 
             />
           </div>
           
           <div>
-            <label style={{ display: 'block', marginBottom: '8px', color: '#4b5563', fontSize: '14px', fontWeight: 'bold' }}>
+            <label className="block mb-2 text-sm font-bold text-slate-600">
               Contraseña
             </label>
             <input 
@@ -44,14 +44,14 @@ const Login = ({ onLogin }) => {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
-              style={{ width: '100%', padding: '12px', borderRadius: '6px', border: '1px solid #d1d5db', boxSizing: 'border-box', outline: 'none' }}
+              className="w-full p-3 rounded-lg border border-slate-300 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
               required 
             />
           </div>
           
           <button 
             type="submit" 
-            style={{ padding: '12px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px', marginTop: '10px' }}
+            className="w-full mt-2 p-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-lg"
           >
             Ingresar
           </button>
