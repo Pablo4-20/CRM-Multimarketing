@@ -2,7 +2,7 @@ import { useState } from 'react';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import HomeView from './HomeView';
-import UsersView from './UsersView';
+import UserView from './UserView';
 
 const DashboardLayout = ({ onLogout }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -27,7 +27,7 @@ const DashboardLayout = ({ onLogout }) => {
 
         {/* Renderizado dinámico de la pestaña activa */}
         {activeTab === 'inicio' && <HomeView setActiveTab={setActiveTab} />}
-        {activeTab === 'usuarios' && <UsersView />}
+        {activeTab === 'usuarios' && <UserView />}
 
       </div>
 
