@@ -49,4 +49,4 @@ Route::post('/asignaciones/desasignar', [AsignacionController::class, 'desasigna
 
 // Rutas para el rol Agente
 Route::get('/agente/clientes/{user_id}', [ClienteController::class, 'getPorAgente']);
-Route::put('/agente/clientes/{id}/notas', [ClienteController::class, 'updateNotas']);
+Route::post('/agente/clientes/{id}/comentarios', [ClienteController::class, 'addComentario']);

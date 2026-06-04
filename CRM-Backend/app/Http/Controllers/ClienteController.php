@@ -98,7 +98,21 @@ class ClienteController extends Controller
             
         return response()->json($clientes);
     }
+    public function addComentario(Request $request, $id) {
+        $request->validate([
+            'texto' => 'required|string',
+            'user_id' => 'required|exists:users,id' // Necesitamos saber qué agente lo escribió
+        ]);
 
+        $comentario = Comentario::create([
+            'cliente_id' => $id,
+            'user_id' => $request->user_id,
+            'texto' => $request->texto
+        ]);
+        $comentario->load('user');
+
+        return response()->json(['message' => 'Comentario agregado', 'comentario' => $comentario]);
+    }
     // NUEVO: Actualizar solo las notas de un cliente
     public function updateNotas(Request $request, $id) {
         $request->validate([
