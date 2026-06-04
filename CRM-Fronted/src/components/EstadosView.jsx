@@ -1,36 +1,36 @@
 import { useState, useEffect } from 'react';
 import { 
   FiSearch, FiPlus, FiX, FiUploadCloud, FiFileText, 
-  FiEdit2, FiTrash2, FiVolume2, FiDownload, FiAlertTriangle
+  FiEdit2, FiTrash2, FiTag, FiDownload, FiAlertTriangle
 } from 'react-icons/fi';
 
-const CampanasView = () => {
+const EstadosView = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   // NUEVO: Estado para el modal de eliminar
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   
-  const [campanas, setCampanas] = useState([]);
+  const [estados, setEstados] = useState([]);
   const [formData, setFormData] = useState({ nombre: '' });
   const [selectedFile, setSelectedFile] = useState(null);
   const [editingId, setEditingId] = useState(null);
-  // NUEVO: Guardar la campaña que se va a eliminar
-  const [campanaToDelete, setCampanaToDelete] = useState(null); 
+  // NUEVO: Guardar el estado que se va a eliminar
+  const [estadoToDelete, setEstadoToDelete] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const API_URL = 'http://127.0.0.1:8000/api/campanas';
+  const API_URL = 'http://127.0.0.1:8000/api/estados';
 
   useEffect(() => {
-    fetchCampanas();
+    fetchEstados();
   }, []);
 
-  const fetchCampanas = async () => {
+  const fetchEstados = async () => {
     try {
       const response = await fetch(API_URL);
       const data = await response.json();
-      setCampanas(data);
+      setEstados(data);
     } catch (error) {
-      console.error("Error al cargar campañas:", error);
+      console.error("Error al cargar estados:", error);
     }
   };
 
@@ -40,9 +40,9 @@ const CampanasView = () => {
     setIsCreateModalOpen(true);
   };
 
-  const openEditModal = (campana) => {
-    setEditingId(campana.id);
-    setFormData({ nombre: campana.nombre });
+  const openEditModal = (estado) => {
+    setEditingId(estado.id);
+    setFormData({ nombre: estado.nombre });
     setIsCreateModalOpen(true);
   };
 
@@ -52,8 +52,8 @@ const CampanasView = () => {
   };
 
   // NUEVO: Abrir modal de eliminar
-  const openDeleteModal = (campana) => {
-    setCampanaToDelete(campana);
+  const openDeleteModal = (estado) => {
+    setEstadoToDelete(estado);
     setIsDeleteModalOpen(true);
   };
 
@@ -76,7 +76,7 @@ const CampanasView = () => {
           body: JSON.stringify({ nombre: formData.nombre })
         });
       }
-      await fetchCampanas();
+      await fetchEstados();
       setIsCreateModalOpen(false);
     } catch (error) {
       console.error("Error al guardar:", error);
@@ -94,33 +94,32 @@ const CampanasView = () => {
     reader.onload = async (event) => {
       const text = event.target.result;
       const lineas = text.split(/\r?\n/);
-      const campañasAEnviar = [];
+      const estadosAEnviar = [];
 
       for (let i = 1; i < lineas.length; i++) {
         const lineaLimpia = lineas[i].trim();
         if (lineaLimpia) {
           const nombreExtraido = lineaLimpia.replace(/(^"|"$)/g, '').trim();
           if (nombreExtraido) {
-            campañasAEnviar.push({ nombre: nombreExtraido });
+            estadosAEnviar.push({ nombre: nombreExtraido });
           }
         }
       }
 
-      if (campañasAEnviar.length > 0) {
+      if (estadosAEnviar.length > 0) {
         try {
           await fetch(`${API_URL}/masivo`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ campanas: campañasAEnviar })
+            body: JSON.stringify({ estados: estadosAEnviar })
           });
-          await fetchCampanas(); 
+          await fetchEstados(); 
         } catch (error) {
           console.error("Error en carga masiva:", error);
         }
       } else {
         alert("El archivo no tiene nombres válidos.");
       }
-
       setSelectedFile(null);
       setIsUploadModalOpen(false);
       setIsLoading(false);
@@ -131,13 +130,13 @@ const CampanasView = () => {
 
   // NUEVO: Lógica real de eliminar
   const confirmDelete = async () => {
-    if (!campanaToDelete) return;
+    if (!estadoToDelete) return;
     setIsLoading(true);
     try {
-      await fetch(`${API_URL}/${campanaToDelete.id}`, { method: 'DELETE' });
-      await fetchCampanas();
+      await fetch(`${API_URL}/${estadoToDelete.id}`, { method: 'DELETE' });
+      await fetchEstados();
       setIsDeleteModalOpen(false);
-      setCampanaToDelete(null);
+      setEstadoToDelete(null);
     } catch (error) {
       console.error("Error al eliminar:", error);
     } finally {
@@ -146,12 +145,12 @@ const CampanasView = () => {
   };
 
   const handleDownloadTemplate = () => {
-    const csvContent = "\uFEFFNombre de la Campaña\nCampaña de Navidad\nPromoción Black Friday\nReactivación de Leads\n";
+    const csvContent = "\uFEFFNombre del Estado\nInteresado\nNo Contesta\nVenta Cerrada\n";
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", "plantilla_creacion_campanas.csv");
+    link.setAttribute("download", "plantilla_estados.csv");
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -163,14 +162,14 @@ const CampanasView = () => {
         
         <div className="p-5 border-b border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white w-full">
           <div>
-            <h3 className="text-lg font-bold text-slate-900 m-0">Gestión de Campañas</h3>
-            <p className="text-xs text-slate-500 mt-1">Crea campañas manualmente o impórtalas masivamente</p>
+            <h3 className="text-lg font-bold text-slate-900 m-0">Gestión de Estados</h3>
+            <p className="text-xs text-slate-500 mt-1">Configura los estados para clasificar a tus clientes</p>
           </div>
           
           <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
             <div className="relative w-full sm:w-56">
               <FiSearch className="absolute left-3 top-2.5 text-slate-400 text-lg" />
-              <input type="text" placeholder="Buscar campaña..." className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 box-border"/>
+              <input type="text" placeholder="Buscar estado..." className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 box-border"/>
             </div>
             
             <button 
@@ -182,9 +181,9 @@ const CampanasView = () => {
 
             <button 
               onClick={openCreateModal}
-              className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition-all text-sm w-full sm:w-auto shrink-0"
+              className="flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition-all text-sm w-full sm:w-auto shrink-0"
             >
-              <FiPlus className="text-lg" /> Nueva Campaña
+              <FiPlus className="text-lg" /> Nuevo Estado
             </button>
           </div>
         </div>
@@ -193,29 +192,29 @@ const CampanasView = () => {
           <table className="w-full text-left border-collapse min-w-[500px]">
             <thead>
               <tr className="bg-slate-50 text-slate-500 font-bold text-[11px] uppercase tracking-wider border-b border-slate-200">
-                <th className="p-4 pl-6">Nombre de la Campaña</th>
+                <th className="p-4 pl-6">Nombre del Estado</th>
                 <th className="p-4 text-center w-32">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
-              {campanas.length === 0 ? (
-                <tr><td colSpan="2" className="text-center p-8 text-slate-400">No hay campañas en la base de datos.</td></tr>
-              ) : campanas.map((camp) => (
-                <tr key={camp.id} className="hover:bg-slate-50/80 transition-colors group">
+              {estados.length === 0 ? (
+                <tr><td colSpan="2" className="text-center p-8 text-slate-400">No hay estados en la base de datos.</td></tr>
+              ) : estados.map((estado) => (
+                <tr key={estado.id} className="hover:bg-slate-50/80 transition-colors group">
                   <td className="p-4 pl-6">
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg bg-blue-100 text-blue-600 shrink-0">
-                        <FiVolume2 />
+                      <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg bg-amber-100 text-amber-600 shrink-0">
+                        <FiTag />
                       </div>
-                      <span className="font-semibold text-slate-900">{camp.nombre}</span>
+                      <span className="font-semibold text-slate-900">{estado.nombre}</span>
                     </div>
                   </td>
                   <td className="p-4 text-center">
                     <div className="flex items-center justify-center gap-2">
-                      <button onClick={() => openEditModal(camp)} className="p-2 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors" title="Editar Nombre">
+                      <button onClick={() => openEditModal(estado)} className="p-2 text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors" title="Editar">
                         <FiEdit2 size={16} />
                       </button>
-                      <button onClick={() => openDeleteModal(camp)} className="p-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors" title="Eliminar">
+                      <button onClick={() => openDeleteModal(estado)} className="p-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors" title="Eliminar">
                         <FiTrash2 size={16} />
                       </button>
                     </div>
@@ -232,7 +231,7 @@ const CampanasView = () => {
           <div className="bg-white rounded-2xl shadow-xl border border-slate-100 w-full max-w-md overflow-hidden animate-slideUp">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
               <h3 className="text-lg font-bold text-slate-900 m-0 flex items-center gap-2">
-                <FiVolume2 className="text-blue-600" /> {editingId ? 'Editar Campaña' : 'Nueva Campaña'}
+                <FiTag className="text-amber-500" /> {editingId ? 'Editar Estado' : 'Nuevo Estado'}
               </h3>
               <button onClick={() => setIsCreateModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1 bg-white border border-slate-200 rounded-md shadow-sm">
                 <FiX size={18} />
@@ -241,18 +240,18 @@ const CampanasView = () => {
             
             <form onSubmit={handleSaveManual} className="p-6 flex flex-col gap-4">
               <div>
-                <label className="block mb-1.5 text-xs font-bold text-slate-500 uppercase">Nombre de la Campaña</label>
+                <label className="block mb-1.5 text-xs font-bold text-slate-500 uppercase">Nombre del Estado</label>
                 <input 
-                  type="text" placeholder="Ej. Promo Día de la Madre" required 
+                  type="text" placeholder="Ej. Cliente Potencial" required 
                   value={formData.nombre} onChange={(e) => setFormData({ nombre: e.target.value })} 
-                  className="w-full p-3 rounded-xl border border-slate-300 bg-slate-50 focus:bg-white focus:border-blue-500 outline-none text-sm box-border" 
+                  className="w-full p-3 rounded-xl border border-slate-300 bg-slate-50 focus:bg-white focus:border-amber-500 outline-none text-sm box-border" 
                 />
               </div>
               
               <div className="flex gap-3 mt-2 pt-4 border-t border-slate-100">
                 <button type="button" onClick={() => setIsCreateModalOpen(false)} className="flex-1 p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold rounded-xl text-sm transition-colors">Cancelar</button>
-                <button type="submit" disabled={isLoading} className="flex-1 p-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm transition-colors shadow-sm shadow-blue-200 disabled:bg-blue-400">
-                  {isLoading ? 'Guardando...' : (editingId ? 'Guardar Cambios' : 'Crear Campaña')}
+                <button type="submit" disabled={isLoading} className="flex-1 p-2.5 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl text-sm transition-colors shadow-sm disabled:bg-amber-300">
+                  {isLoading ? 'Guardando...' : (editingId ? 'Guardar Cambios' : 'Crear Estado')}
                 </button>
               </div>
             </form>
@@ -265,7 +264,7 @@ const CampanasView = () => {
           <div className="bg-white rounded-2xl shadow-xl border border-slate-100 w-full max-w-md overflow-hidden animate-slideUp">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-emerald-50">
               <h3 className="text-lg font-bold text-emerald-900 m-0 flex items-center gap-2">
-                <FiUploadCloud className="text-emerald-600" /> Crear Campañas Masivamente
+                <FiUploadCloud className="text-emerald-600" /> Crear Estados Masivamente
               </h3>
               <button onClick={() => setIsUploadModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1 bg-white border border-slate-200 rounded-md shadow-sm">
                 <FiX size={18} />
@@ -275,8 +274,8 @@ const CampanasView = () => {
             <form onSubmit={handleUploadSave} className="p-6 flex flex-col gap-4">
               <div className="border-2 border-dashed border-emerald-200 bg-emerald-50/30 rounded-2xl p-6 text-center hover:bg-emerald-50 transition-colors mt-2">
                 <FiFileText className="text-3xl text-emerald-400 mx-auto mb-2" />
-                <p className="text-sm font-semibold text-slate-700 mb-1">Sube el archivo CSV con los nombres</p>
-                <p className="text-xs text-slate-500 mb-3">Descarga nuestra plantilla para evitar errores</p>
+                <p className="text-sm font-semibold text-slate-700 mb-1">Sube el archivo CSV</p>
+                <p className="text-xs text-slate-500 mb-3">Recomendado formato .CSV delimitado por comas</p>
                 
                 <label className="bg-white border border-emerald-200 text-emerald-700 px-4 py-2 rounded-lg text-sm font-bold cursor-pointer hover:bg-emerald-50 shadow-sm inline-block">
                   Seleccionar Archivo
@@ -286,7 +285,7 @@ const CampanasView = () => {
 
               <div className="flex justify-center -mt-2 mb-2">
                 <button type="button" onClick={handleDownloadTemplate} className="flex items-center gap-2 text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors">
-                  <FiDownload /> Descargar plantilla CSV de ejemplo
+                  <FiDownload /> Descargar plantilla CSV
                 </button>
               </div>
 
@@ -302,7 +301,7 @@ const CampanasView = () => {
                   Cancelar
                 </button>
                 <button type="submit" disabled={!selectedFile || isLoading} className={`flex-1 p-2.5 font-semibold rounded-xl text-sm transition-colors ${selectedFile ? 'bg-emerald-600 text-white shadow-md hover:bg-emerald-700' : 'bg-slate-200 text-slate-400 cursor-not-allowed'} disabled:bg-emerald-400`}>
-                  {isLoading ? 'Procesando...' : 'Leer Archivo y Crear'}
+                  {isLoading ? 'Procesando...' : 'Leer y Crear'}
                 </button>
               </div>
             </form>
@@ -310,8 +309,8 @@ const CampanasView = () => {
         </div>
       )}
 
-      {/* ================= NUEVO MODAL: ELIMINAR CAMPAÑA ================= */}
-      {isDeleteModalOpen && campanaToDelete && (
+      {/* ================= NUEVO MODAL: ELIMINAR ESTADO ================= */}
+      {isDeleteModalOpen && estadoToDelete && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
           <div className="bg-white rounded-2xl shadow-xl border border-slate-100 w-full max-w-sm overflow-hidden animate-slideUp">
             
@@ -319,14 +318,14 @@ const CampanasView = () => {
               <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center text-3xl mb-4 shadow-sm border border-red-200">
                 <FiAlertTriangle />
               </div>
-              <h3 className="text-xl font-bold text-red-900 m-0">¿Eliminar Campaña?</h3>
+              <h3 className="text-xl font-bold text-red-900 m-0">¿Eliminar Estado?</h3>
               <p className="text-sm text-red-600 mt-2 font-medium">Esta acción no se puede deshacer.</p>
             </div>
 
             <div className="p-6 flex flex-col gap-5">
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center">
-                <span className="text-xs text-slate-500 uppercase font-bold tracking-wider">Campaña seleccionada:</span>
-                <p className="text-slate-800 font-semibold mt-1">{campanaToDelete.nombre}</p>
+                <span className="text-xs text-slate-500 uppercase font-bold tracking-wider">Estado seleccionado:</span>
+                <p className="text-slate-800 font-semibold mt-1">{estadoToDelete.nombre}</p>
               </div>
 
               <div className="flex gap-3 mt-2">
@@ -355,4 +354,4 @@ const CampanasView = () => {
   );
 };
 
-export default CampanasView;
+export default EstadosView;

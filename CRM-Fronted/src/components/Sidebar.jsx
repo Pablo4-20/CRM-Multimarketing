@@ -1,6 +1,6 @@
 import { 
   FiHome, FiUserCheck, FiUsers, FiBarChart2, 
-  FiSettings, FiLogOut, FiChevronLeft, FiChevronRight 
+  FiSettings, FiLogOut, FiChevronLeft, FiChevronRight , FiTag
 } from 'react-icons/fi';
 
 // 1. Recibimos 'user' en las propiedades
@@ -49,8 +49,19 @@ const Sidebar = ({ isCollapsed, toggleSidebar, activeTab, setActiveTab, onLogout
           <svg stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" className="text-xl shrink-0" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
           {!isCollapsed && <span className="truncate">Campañas</span>}
         </li>
+        
+        <li 
+          onClick={() => setActiveTab('estados')}
+          className={`px-4 py-3 rounded-lg cursor-pointer flex items-center gap-3 font-medium transition-colors ${activeTab === 'estados' ? 'bg-amber-50 text-amber-600 font-semibold' : 'text-slate-500 hover:bg-slate-50'}`}
+        >
+          <FiTag className="text-xl shrink-0" />
+          {!isCollapsed && <span className="truncate">Estados</span>}
+        </li>
 
-        <li className="px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-lg cursor-pointer flex items-center gap-3 font-medium transition-colors">
+        <li 
+          onClick={() => setActiveTab('clientes')}
+          className={`px-4 py-3 rounded-lg cursor-pointer flex items-center gap-3 font-medium transition-colors ${activeTab === 'clientes' ? 'bg-indigo-50 text-indigo-600 font-semibold' : 'text-slate-500 hover:bg-slate-50'}`}
+        >
           <FiUsers className="text-xl shrink-0" />
           {!isCollapsed && <span className="truncate">Clientes</span>}
         </li>

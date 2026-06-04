@@ -22,12 +22,16 @@ const Topbar = ({ activeTab, user }) => {
         <h1 className="m-0 text-2xl md:text-3xl font-bold">
           {activeTab === 'inicio' && `Hola, ${user?.name}`}
           {activeTab === 'usuarios' && 'Control de Accesos'}
-          {activeTab === 'campanas' && 'Tus Campañas'} {/* Nuevo Título */}
+          {activeTab === 'campanas' && 'Tus Campañas'}
+          {activeTab === 'estados' && 'Gestión de Estados'} {/* Nuevo */}
+          {activeTab === 'clientes' && 'Directorio de Clientes'}
         </h1>
         <p className="mt-2 text-slate-300">
           {activeTab === 'inicio' && `Tu rol actual es: ${user?.role.toUpperCase()}`}
           {activeTab === 'usuarios' && 'Administra los roles y permisos del equipo de trabajo.'}
-          {activeTab === 'campanas' && 'Segmenta a tus clientes y lanza comunicaciones masivas.'} {/* Nueva Descripción */}
+          {activeTab === 'campanas' && 'Segmenta a tus clientes y lanza comunicaciones masivas.'}
+          {activeTab === 'estados' && 'Define las etapas o fases por las que pasa un cliente.'} {/* Nuevo */}
+          {activeTab === 'clientes' && 'Consulta y gestiona la información de tus clientes.'}
         </p>
       </div>
       

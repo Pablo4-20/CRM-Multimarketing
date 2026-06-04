@@ -4,8 +4,10 @@ import Topbar from './Topbar';
 import HomeView from './HomeView';
 import UserView from './UserView';
 import CampanasView from './CampanasView';
+import EstadosView from './EstadosView';
+import ClientesView from './ClientesView';
 
-// 1. Recibimos la propiedad 'user'
+
 const DashboardLayout = ({ onLogout, user }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState('inicio');
@@ -21,17 +23,19 @@ const DashboardLayout = ({ onLogout, user }) => {
         activeTab={activeTab} 
         setActiveTab={setActiveTab} 
         onLogout={onLogout} 
-        user={user} /* 2. Le pasamos el usuario al Sidebar */
+        user={user} 
       />
 
       <div className="flex-1 p-6 md:p-10 overflow-y-auto w-full">
         
-        <Topbar activeTab={activeTab} user={user} /* 3. Le pasamos el usuario al Topbar */ />
+        <Topbar activeTab={activeTab} user={user} />
 
         {/* Renderizado dinámico de la pestaña activa */}
         {activeTab === 'inicio' && <HomeView setActiveTab={setActiveTab} />}
         {activeTab === 'usuarios' && <UserView />}
         {activeTab === 'campanas' && <CampanasView />}
+        {activeTab === 'estados' && <EstadosView />}
+        {activeTab === 'clientes' && <ClientesView />}
       </div>
 
     </div>
