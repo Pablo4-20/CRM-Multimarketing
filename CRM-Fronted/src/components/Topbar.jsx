@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { FiSettings, FiClock } from 'react-icons/fi';
 
-const Topbar = ({ activeTab }) => {
+// 1. Recibimos 'user'
+const Topbar = ({ activeTab, user }) => {
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
@@ -16,13 +17,17 @@ const Topbar = ({ activeTab }) => {
     <div className="bg-slate-800 rounded-2xl p-6 md:p-8 flex flex-col lg:flex-row justify-between lg:items-center text-white mb-8 shadow-lg gap-6">
       <div>
         <div className="text-xs text-slate-400 font-bold tracking-wider mb-2 flex items-center gap-2">
-          <FiSettings /> {activeTab === 'inicio' ? 'ADMINISTRACIÓN' : 'SEGURIDAD'}
+          <FiSettings /> {activeTab === 'inicio' ? 'DASHBOARD' : 'SEGURIDAD'}
         </div>
         <h1 className="m-0 text-2xl md:text-3xl font-bold">
-          {activeTab === 'inicio' ? 'Hola, Administrador' : 'Control de Accesos'}
+          {activeTab === 'inicio' && `Hola, ${user?.name}`}
+          {activeTab === 'usuarios' && 'Control de Accesos'}
+          {activeTab === 'campanas' && 'Tus Campañas'} {/* Nuevo Título */}
         </h1>
         <p className="mt-2 text-slate-300">
-          {activeTab === 'inicio' ? 'Aquí tienes el resumen de hoy en tu CRM.' : 'Administra los roles y permisos del equipo de trabajo.'}
+          {activeTab === 'inicio' && `Tu rol actual es: ${user?.role.toUpperCase()}`}
+          {activeTab === 'usuarios' && 'Administra los roles y permisos del equipo de trabajo.'}
+          {activeTab === 'campanas' && 'Segmenta a tus clientes y lanza comunicaciones masivas.'} {/* Nueva Descripción */}
         </p>
       </div>
       
