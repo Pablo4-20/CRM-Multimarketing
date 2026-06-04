@@ -1,86 +1,141 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
-  FiSearch, FiPlus, FiX, FiUploadCloud, 
+  FiSearch, FiPlus, FiX, FiUploadCloud, FiFileText, 
   FiEdit2, FiTrash2, FiVolume2, FiDownload
 } from 'react-icons/fi';
 
 const CampanasView = () => {
-  // Modales
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   
-  // Estado de las Campañas (Solo ID y Nombre limpio)
-  const [campanas, setCampanas] = useState([
-    { id: 1, nombre: 'Campaña Día de la Madre' },
-    { id: 2, nombre: 'Reactivación Clientes Antiguos' },
-    { id: 3, nombre: 'Promoción de Verano' },
-  ]);
-
-  // Estados para formularios
+  const [campanas, setCampanas] = useState([]);
   const [formData, setFormData] = useState({ nombre: '' });
   const [selectedFile, setSelectedFile] = useState(null);
   const [editingId, setEditingId] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  // 1. Abrir modal para Crear Manual
+  const API_URL = 'http://127.0.0.1:8000/api/campanas';
+
+  // 1. Cargar campañas desde Laravel
+  useEffect(() => {
+    fetchCampanas();
+  }, []);
+
+  const fetchCampanas = async () => {
+    try {
+      const response = await fetch(API_URL);
+      const data = await response.json();
+      setCampanas(data);
+    } catch (error) {
+      console.error("Error al cargar campañas:", error);
+    }
+  };
+
   const openCreateModal = () => {
     setEditingId(null);
     setFormData({ nombre: '' });
     setIsCreateModalOpen(true);
   };
 
-  // 2. Abrir modal para Editar
   const openEditModal = (campana) => {
     setEditingId(campana.id);
     setFormData({ nombre: campana.nombre });
     setIsCreateModalOpen(true);
   };
 
-  // 3. Abrir modal de Carga Masiva
   const openUploadModal = () => {
     setSelectedFile(null);
     setIsUploadModalOpen(true);
   };
 
-  // Guardar Campaña Manual (Crear o Editar)
-  const handleSaveManual = (e) => {
+  // 2. Guardar (POST) o Editar (PUT)
+  const handleSaveManual = async (e) => {
     e.preventDefault();
     if (!formData.nombre) return;
+    setIsLoading(true);
 
-    if (editingId) {
-      setCampanas(campanas.map(c => c.id === editingId ? { ...c, nombre: formData.nombre } : c));
-    } else {
-      const nueva = { id: Date.now(), nombre: formData.nombre };
-      setCampanas([nueva, ...campanas]);
+    try {
+      if (editingId) {
+        await fetch(`${API_URL}/${editingId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nombre: formData.nombre })
+        });
+      } else {
+        await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nombre: formData.nombre })
+        });
+      }
+      await fetchCampanas();
+      setIsCreateModalOpen(false);
+    } catch (error) {
+      console.error("Error al guardar:", error);
+    } finally {
+      setIsLoading(false);
     }
-    setIsCreateModalOpen(false);
   };
 
-  // Guardar Carga Masiva (Extrae solo los nombres puros del archivo)
+  // 3. Carga Masiva conectada al Backend
   const handleUploadSave = (e) => {
     e.preventDefault();
     if (!selectedFile) return;
+    setIsLoading(true);
 
-    // Simulación: Extraemos exactamente los nombres que vienen en las celdas del Excel/CSV, 
-    // sin agregarle textos como "(De archivo.csv)"
-    const campañasDesdeArchivo = [
-      { id: Date.now() + 1, nombre: 'Campaña Navideña VIP' },
-      { id: Date.now() + 2, nombre: 'Promoción Black Friday' },
-      { id: Date.now() + 3, nombre: 'Leads Captados Mayo' },
-    ];
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const text = event.target.result;
+      const lineas = text.split(/\r?\n/);
+      const campañasAEnviar = [];
 
-    setCampanas([...campañasDesdeArchivo, ...campanas]);
-    setSelectedFile(null);
-    setIsUploadModalOpen(false);
+      // Saltar cabecera
+      for (let i = 1; i < lineas.length; i++) {
+        const lineaLimpia = lineas[i].trim();
+        if (lineaLimpia) {
+          const nombreExtraido = lineaLimpia.replace(/(^"|"$)/g, '').trim();
+          if (nombreExtraido) {
+            campañasAEnviar.push({ nombre: nombreExtraido });
+          }
+        }
+      }
+
+      if (campañasAEnviar.length > 0) {
+        try {
+          // Enviar el array de nombres al backend
+          await fetch(`${API_URL}/masivo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ campanas: campañasAEnviar })
+          });
+          await fetchCampanas(); // Recargar la tabla
+        } catch (error) {
+          console.error("Error en carga masiva:", error);
+        }
+      } else {
+        alert("El archivo no tiene nombres válidos.");
+      }
+
+      setSelectedFile(null);
+      setIsUploadModalOpen(false);
+      setIsLoading(false);
+    };
+
+    reader.readAsText(selectedFile);
   };
 
-  // Eliminar Campaña
-  const handleDelete = (id) => {
+  // 4. Eliminar (DELETE)
+  const handleDelete = async (id) => {
     if(window.confirm('¿Estás seguro de que deseas eliminar esta campaña?')) {
-      setCampanas(campanas.filter(c => c.id !== id));
+      try {
+        await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
+        await fetchCampanas();
+      } catch (error) {
+        console.error("Error al eliminar:", error);
+      }
     }
   };
 
-  // Descargar Plantilla de Ejemplo
   const handleDownloadTemplate = () => {
     const csvContent = "data:text/csv;charset=utf-8,Nombre de la Campana\nCampaña de Navidad\nPromocion Black Friday\nReactivacion de Leads\n";
     const encodedUri = encodeURI(csvContent);
@@ -96,7 +151,6 @@ const CampanasView = () => {
     <div className="animate-fadeIn w-full">
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden w-full">
         
-        {/* CABECERA */}
         <div className="p-5 border-b border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white w-full">
           <div>
             <h3 className="text-lg font-bold text-slate-900 m-0">Gestión de Campañas</h3>
@@ -125,7 +179,6 @@ const CampanasView = () => {
           </div>
         </div>
 
-        {/* TABLA PRINCIPAL */}
         <div className="w-full overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-[500px]">
             <thead>
@@ -136,10 +189,9 @@ const CampanasView = () => {
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
               {campanas.length === 0 ? (
-                <tr><td colSpan="2" className="text-center p-8 text-slate-400">No hay campañas registradas.</td></tr>
+                <tr><td colSpan="2" className="text-center p-8 text-slate-400">No hay campañas en la base de datos.</td></tr>
               ) : campanas.map((camp) => (
                 <tr key={camp.id} className="hover:bg-slate-50/80 transition-colors group">
-                  
                   <td className="p-4 pl-6">
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg bg-blue-100 text-blue-600 shrink-0">
@@ -148,7 +200,6 @@ const CampanasView = () => {
                       <span className="font-semibold text-slate-900">{camp.nombre}</span>
                     </div>
                   </td>
-                  
                   <td className="p-4 text-center">
                     <div className="flex items-center justify-center gap-2">
                       <button onClick={() => openEditModal(camp)} className="p-2 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors" title="Editar Nombre">
@@ -166,7 +217,6 @@ const CampanasView = () => {
         </div>
       </div>
 
-      {/* ================= MODAL 1: CREAR/EDITAR MANUAL ================= */}
       {isCreateModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
           <div className="bg-white rounded-2xl shadow-xl border border-slate-100 w-full max-w-md overflow-hidden animate-slideUp">
@@ -191,8 +241,8 @@ const CampanasView = () => {
               
               <div className="flex gap-3 mt-2 pt-4 border-t border-slate-100">
                 <button type="button" onClick={() => setIsCreateModalOpen(false)} className="flex-1 p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold rounded-xl text-sm transition-colors">Cancelar</button>
-                <button type="submit" className="flex-1 p-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm transition-colors shadow-sm shadow-blue-200">
-                  {editingId ? 'Guardar Cambios' : 'Crear Campaña'}
+                <button type="submit" disabled={isLoading} className="flex-1 p-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm transition-colors shadow-sm shadow-blue-200 disabled:bg-blue-400">
+                  {isLoading ? 'Guardando...' : (editingId ? 'Guardar Cambios' : 'Crear Campaña')}
                 </button>
               </div>
             </form>
@@ -200,7 +250,6 @@ const CampanasView = () => {
         </div>
       )}
 
-      {/* ================= MODAL 2: CARGA MASIVA DE CAMPAÑAS ================= */}
       {isUploadModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
           <div className="bg-white rounded-2xl shadow-xl border border-slate-100 w-full max-w-md overflow-hidden animate-slideUp">
@@ -216,13 +265,18 @@ const CampanasView = () => {
             <form onSubmit={handleUploadSave} className="p-6 flex flex-col gap-4">
               
               <div className="border-2 border-dashed border-emerald-200 bg-emerald-50/30 rounded-2xl p-6 text-center hover:bg-emerald-50 transition-colors mt-2">
-                <FiUploadCloud className="text-3xl text-emerald-400 mx-auto mb-2" />
-                <p className="text-sm font-semibold text-slate-700 mb-1">Sube el archivo con los nombres</p>
-                <p className="text-xs text-slate-500 mb-3">Soporta Excel (.xlsx) y .CSV</p>
+                <FiFileText className="text-3xl text-emerald-400 mx-auto mb-2" />
+                <p className="text-sm font-semibold text-slate-700 mb-1">Sube el archivo CSV con los nombres</p>
+                <p className="text-xs text-slate-500 mb-3">Recomendado formato .CSV delimitado por comas</p>
                 
                 <label className="bg-white border border-emerald-200 text-emerald-700 px-4 py-2 rounded-lg text-sm font-bold cursor-pointer hover:bg-emerald-50 shadow-sm inline-block">
                   Seleccionar Archivo
-                  <input type="file" required accept=".csv, .xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" className="hidden" onChange={(e) => setSelectedFile(e.target.files[0])} />
+                  <input 
+                    type="file" required 
+                    accept=".csv, text/csv" 
+                    className="hidden" 
+                    onChange={(e) => setSelectedFile(e.target.files[0])} 
+                  />
                 </label>
               </div>
 
@@ -243,8 +297,8 @@ const CampanasView = () => {
                 <button type="button" onClick={() => setIsUploadModalOpen(false)} className="flex-1 p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold rounded-xl text-sm transition-colors">
                   Cancelar
                 </button>
-                <button type="submit" disabled={!selectedFile} className={`flex-1 p-2.5 font-semibold rounded-xl text-sm transition-colors ${selectedFile ? 'bg-emerald-600 text-white shadow-md shadow-emerald-200 hover:bg-emerald-700' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>
-                  Crear Campañas
+                <button type="submit" disabled={!selectedFile || isLoading} className={`flex-1 p-2.5 font-semibold rounded-xl text-sm transition-colors ${selectedFile ? 'bg-emerald-600 text-white shadow-md shadow-emerald-200 hover:bg-emerald-700' : 'bg-slate-200 text-slate-400 cursor-not-allowed'} disabled:bg-emerald-400`}>
+                  {isLoading ? 'Procesando...' : 'Leer Archivo y Crear'}
                 </button>
               </div>
             </form>
