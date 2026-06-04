@@ -3,6 +3,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Cliente;
 use App\Models\Campana;
+use App\Models\Comentario; // <-- Asegúrate de que esta línea esté aquí
 use Illuminate\Http\Request;
 
 class ClienteController extends Controller
@@ -90,14 +91,24 @@ class ClienteController extends Controller
         Cliente::findOrFail($id)->delete();
         return response()->json(['message' => 'Cliente eliminado']);
     }
+
+    // -------- MODIFICADO: AHORA TRAE LOS COMENTARIOS --------
     public function getPorAgente($user_id) {
-        $clientes = Cliente::with(['campana', 'estado'])
+        $clientes = Cliente::with([
+                'campana', 
+                'estado', 
+                // Añadimos la relación de comentarios y el usuario de cada comentario, ordenados del más viejo al más nuevo
+                'comentarios' => function($query) {
+                    $query->orderBy('created_at', 'asc')->with('user');
+                }
+            ])
             ->where('user_id', $user_id)
             ->orderBy('id', 'desc')
             ->get();
             
         return response()->json($clientes);
     }
+
     public function addComentario(Request $request, $id) {
         $request->validate([
             'texto' => 'required|string',
@@ -113,7 +124,7 @@ class ClienteController extends Controller
 
         return response()->json(['message' => 'Comentario agregado', 'comentario' => $comentario]);
     }
-    // NUEVO: Actualizar solo las notas de un cliente
+
     public function updateNotas(Request $request, $id) {
         $request->validate([
             'notas' => 'nullable|string'

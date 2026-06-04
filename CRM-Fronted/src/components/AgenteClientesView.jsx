@@ -1,18 +1,32 @@
-import { useState, useEffect } from 'react';
-import { FiSearch, FiX, FiUser, FiMail, FiPhone, FiVolume2, FiTag, FiFileText, FiSave } from 'react-icons/fi';
+import { useState, useEffect, useRef } from 'react';
+import { FiSearch, FiX, FiUser, FiMail, FiPhone, FiVolume2, FiTag, FiSend, FiClock, FiMessageSquare } from 'react-icons/fi';
 
 const AgenteClientesView = ({ user }) => {
   const [clientes, setClientes] = useState([]);
   const [selectedCliente, setSelectedCliente] = useState(null);
-  const [notas, setNotas] = useState('');
+  
+  // Nuevos estados para el manejo de comentarios
+  const [comentarios, setComentarios] = useState([]);
+  const [nuevoComentario, setNuevoComentario] = useState('');
+  
   const [isLoading, setIsLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  
+  // Referencia para hacer scroll automático al último comentario
+  const comentariosEndRef = useRef(null);
 
   useEffect(() => {
     if (user?.id) {
       fetchMisClientes();
     }
   }, [user]);
+
+  // Hacer scroll automático hacia abajo cuando se cargan o añaden comentarios
+  useEffect(() => {
+    if (comentariosEndRef.current) {
+      comentariosEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [comentarios]);
 
   const fetchMisClientes = async () => {
     try {
@@ -26,30 +40,49 @@ const AgenteClientesView = ({ user }) => {
 
   const openDetalleModal = (cliente) => {
     setSelectedCliente(cliente);
-    setNotas(cliente.notas || ''); // Cargar notas existentes si las hay
+    // Asumimos que el backend retorna los comentarios en la relación "comentarios"
+    setComentarios(cliente.comentarios || []); 
+    setNuevoComentario('');
     setIsModalOpen(true);
   };
 
-  const handleSaveNotas = async (e) => {
+  const handleEnviarComentario = async (e) => {
     e.preventDefault();
+    if (!nuevoComentario.trim()) return;
+
     setIsLoading(true);
     try {
-      const response = await fetch(`http://127.0.0.1:8000/api/agente/clientes/${selectedCliente.id}/notas`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notas })
+      // 1. CORRECCIÓN: Agregado "/agente/" en la ruta
+      const response = await fetch(`http://127.0.0.1:8000/api/agente/clientes/${selectedCliente.id}/comentarios`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ 
+          texto: nuevoComentario, // Tu controlador espera "texto"
+          user_id: user.id
+        })
       });
 
       if (response.ok) {
-        await fetchMisClientes(); // Recargar para actualizar la tabla oculta
-        setIsModalOpen(false);
-        setSelectedCliente(null);
+        const data = await response.json();
+        setComentarios([...comentarios, data.comentario]);
+        setNuevoComentario('');
+        await fetchMisClientes(); 
       }
     } catch (error) {
-      console.error("Error al guardar notas:", error);
+      console.error("Error al guardar el comentario:", error);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Función para formatear fechas de los comentarios
+  const formatearFecha = (fechaString) => {
+    if (!fechaString) return 'Ahora';
+    const opciones = { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit' };
+    return new Date(fechaString).toLocaleDateString('es-ES', opciones);
   };
 
   return (
@@ -90,7 +123,12 @@ const AgenteClientesView = ({ user }) => {
                       </div>
                       <div>
                         <div className="font-semibold text-slate-900">{cliente.nombre}</div>
-                        {cliente.notas && <div className="text-[10px] text-teal-600 font-medium flex items-center gap-1 mt-0.5"><FiFileText/> Con notas</div>}
+                        {/* Muestra un icono si el cliente tiene comentarios */}
+                        {cliente.comentarios && cliente.comentarios.length > 0 && (
+                          <div className="text-[10px] text-teal-600 font-medium flex items-center gap-1 mt-0.5">
+                            <FiMessageSquare/> {cliente.comentarios.length} comentarios
+                          </div>
+                        )}
                       </div>
                     </div>
                   </td>
@@ -119,10 +157,10 @@ const AgenteClientesView = ({ user }) => {
         </div>
       </div>
 
-      {/* MODAL DE DETALLE Y NOTAS */}
+      {/* MODAL DE DETALLE Y COMENTARIOS */}
       {isModalOpen && selectedCliente && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-100 w-full max-w-2xl overflow-hidden animate-slideUp flex flex-col max-h-[90vh]">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-100 w-full max-w-4xl overflow-hidden animate-slideUp flex flex-col max-h-[90vh]">
             
             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-teal-50 shrink-0">
               <h3 className="text-lg font-bold text-teal-900 m-0 flex items-center gap-2">
@@ -133,19 +171,19 @@ const AgenteClientesView = ({ user }) => {
               </button>
             </div>
             
-            <div className="p-6 overflow-y-auto flex-1 flex flex-col md:flex-row gap-6">
+            <div className="flex-1 flex flex-col md:flex-row min-h-0">
               
-              {/* Columna Izquierda: Información */}
-              <div className="w-full md:w-1/2 flex flex-col gap-4">
+              {/* Columna Izquierda: Información del Cliente */}
+              <div className="w-full md:w-5/12 p-6 flex flex-col gap-4 overflow-y-auto border-r border-slate-100">
                 <div>
                   <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Nombre Completo</h4>
-                  <p className="text-slate-800 font-semibold text-lg">{selectedCliente.nombre}</p>
+                  <p className="text-slate-800 font-semibold text-xl">{selectedCliente.nombre}</p>
                 </div>
                 
                 <div className="grid grid-cols-1 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
                   <div>
                     <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1"><FiMail/> Correo Electrónico</h4>
-                    <p className="text-slate-700 font-medium">{selectedCliente.email || 'No registrado'}</p>
+                    <p className="text-slate-700 font-medium break-all">{selectedCliente.email || 'No registrado'}</p>
                   </div>
                   <div>
                     <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1"><FiPhone/> Teléfono</h4>
@@ -165,29 +203,88 @@ const AgenteClientesView = ({ user }) => {
                 </div>
               </div>
 
-              {/* Columna Derecha: Notas y Comentarios */}
-              <form onSubmit={handleSaveNotas} className="w-full md:w-1/2 flex flex-col border-t md:border-t-0 md:border-l border-slate-200 pt-6 md:pt-0 md:pl-6">
-                <div className="flex-1 flex flex-col">
-                  <label className="text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
-                    <FiFileText className="text-teal-500"/> Comentarios y Notas de Gestión
-                  </label>
-                  <textarea 
-                    value={notas}
-                    onChange={(e) => setNotas(e.target.value)}
-                    placeholder="Escribe aquí los acuerdos, próximas llamadas o información relevante del cliente..."
-                    className="w-full flex-1 min-h-[150px] p-3 rounded-xl border border-slate-300 bg-slate-50 focus:bg-white focus:border-teal-500 outline-none text-sm resize-none"
-                  ></textarea>
-                </div>
+              {/* Columna Derecha: Muro de Comentarios (Estilo Facebook) */}
+              <div className="w-full md:w-7/12 flex flex-col bg-slate-50">
                 
-                <button 
-                  type="submit" 
-                  disabled={isLoading} 
-                  className="mt-4 w-full flex items-center justify-center gap-2 p-3 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl text-sm transition-colors shadow-sm disabled:bg-teal-400"
-                >
-                  <FiSave /> {isLoading ? 'Guardando...' : 'Guardar Notas'}
-                </button>
-              </form>
+                {/* Cabecera del muro */}
+                <div className="p-4 border-b border-slate-200 bg-white shrink-0">
+                  <h4 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                    <FiMessageSquare className="text-teal-500"/> Historial de Gestión
+                  </h4>
+                </div>
 
+                {/* Lista de comentarios (Scrollable) */}
+                <div className="flex-1 p-6 overflow-y-auto flex flex-col gap-5 bg-slate-50 min-h-[300px]">
+                  {comentarios.length === 0 ? (
+                    <div className="m-auto text-center text-slate-400 flex flex-col items-center gap-2">
+                      <FiMessageSquare size={32} className="opacity-20" />
+                      <p className="text-sm">No hay comentarios aún. Sé el primero en escribir.</p>
+                    </div>
+                  ) : (
+                    comentarios.map((comentario, index) => (
+                      <div key={comentario.id || index} className="flex gap-3 animate-fadeIn">
+                        {/* Avatar del usuario que comenta */}
+                        <div className="w-8 h-8 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-xs shrink-0">
+                          {(comentario.user?.name || user.name || 'A').charAt(0).toUpperCase()}
+                        </div>
+                        
+                        {/* Contenedor del comentario */}
+                        <div className="flex-1">
+                          <div className="bg-white border border-slate-200 rounded-2xl rounded-tl-none p-3 shadow-sm inline-block min-w-[60%] max-w-full">
+                            <div className="flex justify-between items-end gap-4 mb-1">
+                              <span className="font-bold text-xs text-slate-800">
+                                {comentario.user?.name || user.name || 'Agente'}
+                              </span>
+                            </div>
+                            <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
+                              {/* AQUÍ ESTÁ EL ARREGLO: comentario.texto */}
+                              {comentario.texto}
+                            </p>
+                          </div>
+                          {/* Fecha fuera de la burbuja */}
+                          <div className="text-[10px] text-slate-400 mt-1 ml-1 flex items-center gap-1">
+                            <FiClock size={10}/> {formatearFecha(comentario.created_at)}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                  <div ref={comentariosEndRef} />
+                </div>
+
+                {/* Caja para escribir nuevo comentario */}
+                <div className="p-4 bg-white border-t border-slate-200 shrink-0">
+                  <form onSubmit={handleEnviarComentario} className="flex items-end gap-2">
+                    <div className="flex-1 relative">
+                      <textarea 
+                        value={nuevoComentario}
+                        onChange={(e) => setNuevoComentario(e.target.value)}
+                        placeholder="Escribe un nuevo comentario o nota..."
+                        className="w-full pl-4 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white resize-none max-h-32 min-h-[50px]"
+                        rows="2"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            handleEnviarComentario(e);
+                          }
+                        }}
+                      ></textarea>
+                      <div className="absolute right-2 bottom-[-20px] text-[10px] text-slate-400">
+                        Presiona Enter para enviar, Shift+Enter para nueva línea
+                      </div>
+                    </div>
+                    
+                    <button 
+                      type="submit" 
+                      disabled={isLoading || !nuevoComentario.trim()} 
+                      className="p-3 bg-teal-600 hover:bg-teal-700 text-white rounded-xl transition-colors shadow-sm disabled:bg-teal-300 disabled:cursor-not-allowed shrink-0 h-[50px] w-[50px] flex items-center justify-center"
+                    >
+                      <FiSend className={isLoading ? "animate-pulse" : ""} />
+                    </button>
+                  </form>
+                </div>
+
+              </div>
             </div>
           </div>
         </div>
