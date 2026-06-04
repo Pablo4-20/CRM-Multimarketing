@@ -45,3 +45,4 @@ Route::delete('/clientes/{id}', [ClienteController::class, 'destroy']);
 // Asignaciones masivas
 Route::get('/asignaciones/datos', [AsignacionController::class, 'getDatosModal']);
 Route::post('/asignaciones/procesar', [AsignacionController::class, 'asignarMasivo']);
+Route::post('/asignaciones/desasignar', [AsignacionController::class, 'desasignarMasivo']);
