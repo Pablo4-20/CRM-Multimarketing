@@ -46,3 +46,7 @@ Route::delete('/clientes/{id}', [ClienteController::class, 'destroy']);
 Route::get('/asignaciones/datos', [AsignacionController::class, 'getDatosModal']);
 Route::post('/asignaciones/procesar', [AsignacionController::class, 'asignarMasivo']);
 Route::post('/asignaciones/desasignar', [AsignacionController::class, 'desasignarMasivo']);
+
+// Rutas para el rol Agente
+Route::get('/agente/clientes/{user_id}', [ClienteController::class, 'getPorAgente']);
+Route::put('/agente/clientes/{id}/notas', [ClienteController::class, 'updateNotas']);

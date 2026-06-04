@@ -35,7 +35,8 @@ const Topbar = ({ activeTab, user }) => {
           {activeTab === 'estados' && 'Define las etapas o fases por las que pasa un cliente.'} {/* Nuevo */}
           {activeTab === 'clientes' && 'Consulta y gestiona la información de tus clientes.'}
           {activeTab === 'asignaciones' && 'Administra las asignaciones de tareas y responsabilidades.'}
-        
+          {activeTab === 'mis_clientes' && 'Gestión de Mis Clientes'}
+          {activeTab === 'mis_clientes' && 'Revisa la información y agrega comentarios a tus clientes asignados.'}
         </p>
       </div>
       

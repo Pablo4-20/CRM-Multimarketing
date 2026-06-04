@@ -90,4 +90,24 @@ class ClienteController extends Controller
         Cliente::findOrFail($id)->delete();
         return response()->json(['message' => 'Cliente eliminado']);
     }
+    public function getPorAgente($user_id) {
+        $clientes = Cliente::with(['campana', 'estado'])
+            ->where('user_id', $user_id)
+            ->orderBy('id', 'desc')
+            ->get();
+            
+        return response()->json($clientes);
+    }
+
+    // NUEVO: Actualizar solo las notas de un cliente
+    public function updateNotas(Request $request, $id) {
+        $request->validate([
+            'notas' => 'nullable|string'
+        ]);
+
+        $cliente = Cliente::findOrFail($id);
+        $cliente->update(['notas' => $request->notas]);
+
+        return response()->json(['message' => 'Notas guardadas correctamente', 'cliente' => $cliente]);
+    }
 }

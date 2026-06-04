@@ -7,7 +7,7 @@ import CampanasView from './CampanasView';
 import EstadosView from './EstadosView';
 import ClientesView from './ClientesView';
 import AsignacionesView from './AsignacionesView';
-
+import AgenteClientesView from './AgenteClientesView';
 
 const DashboardLayout = ({ onLogout, user }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -31,14 +31,15 @@ const DashboardLayout = ({ onLogout, user }) => {
         
         <Topbar activeTab={activeTab} user={user} />
 
-        {/* Renderizado dinámico de la pestaña activa */}
+        {/* Vistas dinámicas */}
         {activeTab === 'inicio' && <HomeView setActiveTab={setActiveTab} />}
         {activeTab === 'usuarios' && <UserView />}
         {activeTab === 'campanas' && <CampanasView />}
         {activeTab === 'estados' && <EstadosView />}
         {activeTab === 'clientes' && <ClientesView />}
         {activeTab === 'asignaciones' && <AsignacionesView />}
-        
+        {activeTab === 'mis_clientes' && <AgenteClientesView user={user} />}
+
       </div>
 
     </div>

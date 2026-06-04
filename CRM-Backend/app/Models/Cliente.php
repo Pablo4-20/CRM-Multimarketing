@@ -8,7 +8,7 @@ class Cliente extends Model
 {
     use HasFactory;
     
-    protected $fillable = ['nombre', 'email', 'telefono', 'user_id', 'campana_id', 'estado_id'];
+    protected $fillable = ['nombre', 'email', 'telefono', 'user_id', 'campana_id', 'estado_id', 'notas'];
 
     // Relaciones para poder mostrar los nombres en la tabla
     public function user() {
