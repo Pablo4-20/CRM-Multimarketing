@@ -1,9 +1,8 @@
 import { 
   FiHome, FiUserCheck, FiUsers, FiBarChart2, 
-  FiSettings, FiLogOut, FiChevronLeft, FiChevronRight , FiTag
+  FiSettings, FiLogOut, FiChevronLeft, FiChevronRight, FiTag, FiCheckSquare
 } from 'react-icons/fi';
 
-// 1. Recibimos 'user' en las propiedades
 const Sidebar = ({ isCollapsed, toggleSidebar, activeTab, setActiveTab, onLogout, user }) => {
   
   // Obtenemos la primera letra del nombre para el círculo
@@ -22,7 +21,7 @@ const Sidebar = ({ isCollapsed, toggleSidebar, activeTab, setActiveTab, onLogout
         </button>
       </div>
       
-      <ul className="flex-1 px-4 flex flex-col gap-2 m-0 list-none">
+      <ul className="flex-1 px-4 flex flex-col gap-2 m-0 list-none overflow-y-auto overflow-x-hidden">
         <li 
           onClick={() => setActiveTab('inicio')}
           className={`px-4 py-3 rounded-lg cursor-pointer flex items-center gap-3 font-medium transition-colors ${activeTab === 'inicio' ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-slate-500 hover:bg-slate-50'}`}
@@ -31,16 +30,27 @@ const Sidebar = ({ isCollapsed, toggleSidebar, activeTab, setActiveTab, onLogout
           {!isCollapsed && <span className="truncate">Inicio</span>}
         </li>
 
-        {/* 2. PROTECCIÓN DE RUTA: Solo mostramos "Gestión Usuarios" si NO es agente */}
+        {/* PROTECCIÓN DE RUTA: Solo mostramos "Gestión Usuarios" y "Asignaciones" si NO es agente */}
         {(user?.role === 'super-admin' || user?.role === 'admin') && (
-          <li 
-            onClick={() => setActiveTab('usuarios')}
-            className={`px-4 py-3 rounded-lg cursor-pointer flex items-center gap-3 font-medium transition-colors ${activeTab === 'usuarios' ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-slate-500 hover:bg-slate-50'}`}
-          >
-            <FiUserCheck className="text-xl shrink-0" />
-            {!isCollapsed && <span className="truncate">Gestión Usuarios</span>}
-          </li>
+          <>
+            <li 
+              onClick={() => setActiveTab('usuarios')}
+              className={`px-4 py-3 rounded-lg cursor-pointer flex items-center gap-3 font-medium transition-colors ${activeTab === 'usuarios' ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-slate-500 hover:bg-slate-50'}`}
+            >
+              <FiUserCheck className="text-xl shrink-0" />
+              {!isCollapsed && <span className="truncate">Gestión Usuarios</span>}
+            </li>
+            
+            <li 
+              onClick={() => setActiveTab('asignaciones')}
+              className={`px-4 py-3 rounded-lg cursor-pointer flex items-center gap-3 font-medium transition-colors ${activeTab === 'asignaciones' ? 'bg-slate-800 text-white font-semibold shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
+            >
+              <FiCheckSquare className="text-xl shrink-0" />
+              {!isCollapsed && <span className="truncate">Asignaciones</span>}
+            </li>
+          </>
         )}
+
         <li 
           onClick={() => setActiveTab('campanas')}
           className={`px-4 py-3 rounded-lg cursor-pointer flex items-center gap-3 font-medium transition-colors ${activeTab === 'campanas' ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-slate-500 hover:bg-slate-50'}`}
@@ -65,6 +75,7 @@ const Sidebar = ({ isCollapsed, toggleSidebar, activeTab, setActiveTab, onLogout
           <FiUsers className="text-xl shrink-0" />
           {!isCollapsed && <span className="truncate">Clientes</span>}
         </li>
+        
         <li className="px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-lg cursor-pointer flex items-center gap-3 font-medium transition-colors">
           <FiBarChart2 className="text-xl shrink-0" />
           {!isCollapsed && <span className="truncate">Reportes</span>}
@@ -75,7 +86,7 @@ const Sidebar = ({ isCollapsed, toggleSidebar, activeTab, setActiveTab, onLogout
         </li>
       </ul>
 
-      {/* 3. PERFIL DE USUARIO DINÁMICO */}
+      {/* PERFIL DE USUARIO DINÁMICO */}
       <div className={`p-5 border-t border-slate-200 flex items-center gap-3 ${isCollapsed ? 'justify-center flex-col' : 'justify-start'}`}>
         <div className="w-9 h-9 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold shrink-0 shadow-md">
           {initial}

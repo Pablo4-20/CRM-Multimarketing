@@ -6,8 +6,9 @@ use Illuminate\Http\Request;
 
 class ClienteController extends Controller
 {
-    public function index() {
-        return response()->json(Cliente::orderBy('id', 'desc')->get());
+   public function index() {
+        // Añadimos 'with' para traer los datos relacionados
+        return response()->json(Cliente::with(['user', 'campana', 'estado'])->orderBy('id', 'desc')->get());
     }
 
     public function storeMasivo(Request $request) {

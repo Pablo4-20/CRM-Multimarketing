@@ -7,6 +7,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CampanaController;
 use App\Http\Controllers\EstadoController;
 use App\Http\Controllers\ClienteController;
+use App\Http\Controllers\AsignacionController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -40,3 +41,7 @@ Route::post('/clientes', [ClienteController::class, 'store']);
 Route::post('/clientes/masivo', [ClienteController::class, 'storeMasivo']); // Ruta especial
 Route::put('/clientes/{id}', [ClienteController::class, 'update']);
 Route::delete('/clientes/{id}', [ClienteController::class, 'destroy']);
+
+// Asignaciones masivas
+Route::get('/asignaciones/datos', [AsignacionController::class, 'getDatosModal']);
+Route::post('/asignaciones/procesar', [AsignacionController::class, 'asignarMasivo']);

@@ -6,6 +6,7 @@ import UserView from './UserView';
 import CampanasView from './CampanasView';
 import EstadosView from './EstadosView';
 import ClientesView from './ClientesView';
+import AsignacionesView from './AsignacionesView';
 
 
 const DashboardLayout = ({ onLogout, user }) => {
@@ -36,6 +37,8 @@ const DashboardLayout = ({ onLogout, user }) => {
         {activeTab === 'campanas' && <CampanasView />}
         {activeTab === 'estados' && <EstadosView />}
         {activeTab === 'clientes' && <ClientesView />}
+        {activeTab === 'asignaciones' && <AsignacionesView />}
+        
       </div>
 
     </div>

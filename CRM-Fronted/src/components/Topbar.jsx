@@ -25,6 +25,8 @@ const Topbar = ({ activeTab, user }) => {
           {activeTab === 'campanas' && 'Tus Campañas'}
           {activeTab === 'estados' && 'Gestión de Estados'} {/* Nuevo */}
           {activeTab === 'clientes' && 'Directorio de Clientes'}
+          {activeTab === 'asignaciones' && 'Gestión de Asignaciones'}
+        
         </h1>
         <p className="mt-2 text-slate-300">
           {activeTab === 'inicio' && `Tu rol actual es: ${user?.role.toUpperCase()}`}
@@ -32,6 +34,8 @@ const Topbar = ({ activeTab, user }) => {
           {activeTab === 'campanas' && 'Segmenta a tus clientes y lanza comunicaciones masivas.'}
           {activeTab === 'estados' && 'Define las etapas o fases por las que pasa un cliente.'} {/* Nuevo */}
           {activeTab === 'clientes' && 'Consulta y gestiona la información de tus clientes.'}
+          {activeTab === 'asignaciones' && 'Administra las asignaciones de tareas y responsabilidades.'}
+        
         </p>
       </div>
       
