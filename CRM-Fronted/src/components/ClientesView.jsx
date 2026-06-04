@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
 import { 
   FiSearch, FiX, FiUploadCloud, 
-  FiEdit2, FiTrash2, FiUsers, FiDownload, FiAlertTriangle, FiMail, FiPhone
+  FiEdit2, FiTrash2, FiUsers, FiDownload, FiAlertTriangle, FiMail, FiPhone, FiVolume2
 } from 'react-icons/fi';
-// Importamos la librería de Excel que acabas de instalar
 import * as XLSX from 'xlsx';
 
 const ClientesView = () => {
@@ -12,9 +11,10 @@ const ClientesView = () => {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   
   const [clientes, setClientes] = useState([]);
+  const [campanas, setCampanas] = useState([]); // <-- Nuevo para el Edit Modal
   const [selectedFile, setSelectedFile] = useState(null);
   
-  const [formData, setFormData] = useState({ nombre: '', email: '', telefono: '' });
+  const [formData, setFormData] = useState({ nombre: '', email: '', telefono: '', campana_id: '' });
   const [editingId, setEditingId] = useState(null);
   const [clienteToDelete, setClienteToDelete] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -23,6 +23,7 @@ const ClientesView = () => {
 
   useEffect(() => {
     fetchClientes();
+    fetchCampanas();
   }, []);
 
   const fetchClientes = async () => {
@@ -35,6 +36,16 @@ const ClientesView = () => {
     }
   };
 
+  const fetchCampanas = async () => {
+    try {
+      const response = await fetch('http://127.0.0.1:8000/api/campanas');
+      const data = await response.json();
+      setCampanas(data);
+    } catch (error) {
+      console.error("Error al cargar campañas:", error);
+    }
+  };
+
   const openUploadModal = () => {
     setSelectedFile(null);
     setIsUploadModalOpen(true);
@@ -42,7 +53,12 @@ const ClientesView = () => {
 
   const openEditModal = (cliente) => {
     setEditingId(cliente.id);
-    setFormData({ nombre: cliente.nombre, email: cliente.email || '', telefono: cliente.telefono || '' });
+    setFormData({ 
+      nombre: cliente.nombre, 
+      email: cliente.email || '', 
+      telefono: cliente.telefono || '',
+      campana_id: cliente.campana_id || ''
+    });
     setIsEditModalOpen(true);
   };
 
@@ -52,7 +68,7 @@ const ClientesView = () => {
   };
 
   // ==============================================================
-  // LECTURA DE EXCEL (.XLSX) REAL
+  // LECTURA DE EXCEL MODIFICADA PARA LEER CAMPAÑA
   // ==============================================================
   const handleUploadSave = (e) => {
     e.preventDefault();
@@ -62,77 +78,61 @@ const ClientesView = () => {
     const reader = new FileReader();
     reader.onload = async (event) => {
       try {
-        // Leemos el archivo Excel en formato binario
         const data = new Uint8Array(event.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
-        
-        // Obtenemos la primera pestaña/hoja del Excel
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
-
-        // Convertimos las filas de Excel a un arreglo JSON
         const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
         const clientesAEnviar = [];
 
         jsonData.forEach((row) => {
-          // Buscamos las columnas por su título (ignorando mayúsculas)
           const nombre = row['Nombre'] || row['nombre'] || row['NOMBRE'] || '';
           const email = row['Email'] || row['email'] || row['EMAIL'] || '';
           const telefono = row['Telefono'] || row['telefono'] || row['Teléfono'] || row['teléfono'] || '';
+          // NUEVO: Lee la columna de Campaña
+          const campana = row['Campaña'] || row['campaña'] || row['Campana'] || row['campana'] || '';
 
           if (nombre) {
             clientesAEnviar.push({ 
               nombre: String(nombre).trim(), 
               email: String(email).trim(), 
-              telefono: String(telefono).trim() 
+              telefono: String(telefono).trim(),
+              campana: String(campana).trim() 
             });
           }
         });
 
         if (clientesAEnviar.length > 0) {
-          // Enviamos a Laravel exactamente igual que antes
           await fetch(`${API_URL}/masivo`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ clientes: clientesAEnviar })
           });
           await fetchClientes(); 
+          await fetchCampanas(); // Refrescamos por si se crearon campañas nuevas automáticamente
         } else {
           alert("El archivo Excel está vacío o le falta la columna 'Nombre'.");
         }
       } catch (error) {
         console.error("Error leyendo Excel:", error);
-        alert("Hubo un error al procesar el archivo Excel. Asegúrate de que no esté dañado.");
       }
 
       setSelectedFile(null);
       setIsUploadModalOpen(false);
       setIsLoading(false);
     };
-
-    // Para Excel es obligatorio usar ArrayBuffer
     reader.readAsArrayBuffer(selectedFile);
   };
 
-  // ==============================================================
-  // DESCARGAR PLANTILLA EXCEL (.XLSX)
-  // ==============================================================
   const handleDownloadTemplate = () => {
-    // 1. Definimos los datos de ejemplo que irán en las columnas
     const datosEjemplo = [
-      { Nombre: "Juan Perez", Email: "juan@ejemplo.com", Telefono: "0991234567" },
-      { Nombre: "Maria Lopez", Email: "maria@ejemplo.com", Telefono: "0987654321" }
+      { Nombre: "Juan Perez", Email: "juan@ejemplo.com", Telefono: "0991234567", Campaña: "Promoción Black Friday" },
+      { Nombre: "Maria Lopez", Email: "maria@ejemplo.com", Telefono: "0987654321", Campaña: "Reactivación Clientes" }
     ];
-    
-    // 2. Creamos la hoja de Excel a partir de los datos
     const hoja = XLSX.utils.json_to_sheet(datosEjemplo);
-    
-    // 3. Creamos un libro de Excel y le añadimos la hoja
     const libro = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(libro, hoja, "Clientes");
-    
-    // 4. Forzamos la descarga del archivo .xlsx en el navegador
     XLSX.writeFile(libro, "Plantilla_Clientes.xlsx");
   };
 
@@ -196,10 +196,11 @@ const ClientesView = () => {
         </div>
 
         <div className="w-full overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[800px]">
+          <table className="w-full text-left border-collapse min-w-[900px]">
             <thead>
               <tr className="bg-slate-50 text-slate-500 font-bold text-[11px] uppercase tracking-wider border-b border-slate-200">
                 <th className="p-4 pl-6">Nombre del Cliente</th>
+                <th className="p-4">Campaña</th>
                 <th className="p-4">Email</th>
                 <th className="p-4">Teléfono</th>
                 <th className="p-4 text-center w-32">Acciones</th>
@@ -207,7 +208,7 @@ const ClientesView = () => {
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
               {clientes.length === 0 ? (
-                <tr><td colSpan="4" className="text-center p-8 text-slate-400">No hay clientes importados.</td></tr>
+                <tr><td colSpan="5" className="text-center p-8 text-slate-400">No hay clientes importados.</td></tr>
               ) : clientes.map((cliente) => (
                 <tr key={cliente.id} className="hover:bg-slate-50/80 transition-colors group">
                   <td className="p-4 pl-6">
@@ -219,18 +220,23 @@ const ClientesView = () => {
                     </div>
                   </td>
                   <td className="p-4">
+                    {cliente.campana ? (
+                      <span className="flex items-center gap-1.5 text-blue-700 bg-blue-50 border border-blue-100 px-2 py-1 rounded text-xs font-medium w-fit"><FiVolume2/> {cliente.campana.nombre}</span>
+                    ) : <span className="italic text-slate-400 text-xs">Sin campaña</span>}
+                  </td>
+                  <td className="p-4">
                     {cliente.email ? (
                       <div className="flex items-center gap-2 text-slate-600">
                         <FiMail className="text-slate-400 shrink-0" /> <span className="truncate">{cliente.email}</span>
                       </div>
-                    ) : <span className="italic text-slate-400 text-xs">Sin email</span>}
+                    ) : <span className="italic text-slate-400 text-xs">-</span>}
                   </td>
                   <td className="p-4">
                     {cliente.telefono ? (
                       <div className="flex items-center gap-2 text-slate-600">
                         <FiPhone className="text-slate-400 shrink-0" /> {cliente.telefono}
                       </div>
-                    ) : <span className="italic text-slate-400 text-xs">Sin teléfono</span>}
+                    ) : <span className="italic text-slate-400 text-xs">-</span>}
                   </td>
                   <td className="p-4 text-center">
                     <div className="flex items-center justify-center gap-2">
@@ -266,17 +272,11 @@ const ClientesView = () => {
               <div className="border-2 border-dashed border-indigo-200 bg-indigo-50/30 rounded-2xl p-6 text-center hover:bg-indigo-50 transition-colors mt-2">
                 <FiUsers className="text-3xl text-indigo-400 mx-auto mb-2" />
                 <p className="text-sm font-semibold text-slate-700 mb-1">Sube el archivo Excel</p>
-                <p className="text-xs text-slate-500 mb-3">Solo archivos <strong>.xlsx</strong> y <strong>.xls</strong> soportados.</p>
+                <p className="text-xs text-slate-500 mb-3">Soporta columnas: Nombre, Email, Telefono y <strong>Campaña</strong></p>
                 
                 <label className="bg-white border border-indigo-200 text-indigo-700 px-4 py-2 rounded-lg text-sm font-bold cursor-pointer hover:bg-indigo-50 shadow-sm inline-block">
                   Seleccionar Archivo
-                  {/* AQUÍ LIMITAMOS A SOLO EXCEL */}
-                  <input 
-                    type="file" required 
-                    accept=".xlsx, .xls" 
-                    className="hidden" 
-                    onChange={(e) => setSelectedFile(e.target.files[0])} 
-                  />
+                  <input type="file" required accept=".xlsx, .xls" className="hidden" onChange={(e) => setSelectedFile(e.target.files[0])} />
                 </label>
               </div>
 
@@ -294,9 +294,7 @@ const ClientesView = () => {
               )}
 
               <div className="flex gap-3 border-t border-slate-100 pt-4">
-                <button type="button" onClick={() => setIsUploadModalOpen(false)} className="flex-1 p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold rounded-xl text-sm transition-colors">
-                  Cancelar
-                </button>
+                <button type="button" onClick={() => setIsUploadModalOpen(false)} className="flex-1 p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold rounded-xl text-sm transition-colors">Cancelar</button>
                 <button type="submit" disabled={!selectedFile || isLoading} className={`flex-1 p-2.5 font-semibold rounded-xl text-sm transition-colors ${selectedFile ? 'bg-indigo-600 text-white shadow-md hover:bg-indigo-700' : 'bg-slate-200 text-slate-400 cursor-not-allowed'} disabled:bg-indigo-400`}>
                   {isLoading ? 'Leyendo Excel...' : 'Importar Contactos'}
                 </button>
@@ -314,9 +312,7 @@ const ClientesView = () => {
               <h3 className="text-lg font-bold text-slate-900 m-0 flex items-center gap-2">
                 <FiEdit2 className="text-indigo-600" /> Editar Cliente
               </h3>
-              <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1 bg-white border border-slate-200 rounded-md shadow-sm">
-                <FiX size={18} />
-              </button>
+              <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1 bg-white border border-slate-200 rounded-md shadow-sm"><FiX size={18} /></button>
             </div>
             
             <form onSubmit={handleUpdate} className="p-6 flex flex-col gap-4">
@@ -324,6 +320,16 @@ const ClientesView = () => {
                 <label className="block mb-1.5 text-xs font-bold text-slate-500 uppercase">Nombre</label>
                 <input type="text" required value={formData.nombre} onChange={(e) => setFormData({ ...formData, nombre: e.target.value })} className="w-full p-3 rounded-xl border border-slate-300 bg-slate-50 focus:bg-white focus:border-indigo-500 outline-none text-sm box-border" />
               </div>
+              
+              {/* NUEVO: Select de Campaña */}
+              <div>
+                <label className="block mb-1.5 text-xs font-bold text-slate-500 uppercase">Campaña Asignada</label>
+                <select value={formData.campana_id} onChange={(e) => setFormData({ ...formData, campana_id: e.target.value })} className="w-full p-3 rounded-xl border border-slate-300 bg-slate-50 focus:bg-white focus:border-indigo-500 outline-none text-sm box-border">
+                  <option value="">-- Sin Campaña --</option>
+                  {campanas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                </select>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block mb-1.5 text-xs font-bold text-slate-500 uppercase">Email</label>
@@ -334,6 +340,7 @@ const ClientesView = () => {
                   <input type="text" value={formData.telefono} onChange={(e) => setFormData({ ...formData, telefono: e.target.value })} className="w-full p-3 rounded-xl border border-slate-300 bg-slate-50 focus:bg-white focus:border-indigo-500 outline-none text-sm box-border" />
                 </div>
               </div>
+
               <div className="flex gap-3 mt-2 pt-4 border-t border-slate-100">
                 <button type="button" onClick={() => setIsEditModalOpen(false)} className="flex-1 p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold rounded-xl text-sm transition-colors">Cancelar</button>
                 <button type="submit" disabled={isLoading} className="flex-1 p-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl text-sm transition-colors shadow-sm disabled:bg-indigo-400">
@@ -352,7 +359,6 @@ const ClientesView = () => {
             <div className="p-6 bg-red-50 flex flex-col items-center text-center">
               <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center text-3xl mb-4 shadow-sm border border-red-200"><FiAlertTriangle /></div>
               <h3 className="text-xl font-bold text-red-900 m-0">¿Eliminar Cliente?</h3>
-              <p className="text-sm text-red-600 mt-2 font-medium">Esta acción no se puede deshacer.</p>
             </div>
             <div className="p-6 flex flex-col gap-5">
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center">

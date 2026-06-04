@@ -9,7 +9,6 @@ use Illuminate\Http\Request;
 
 class AsignacionController extends Controller
 {
-    // Obtiene los datos necesarios para llenar los 'Select' del Modal
     public function getDatosModal() {
         return response()->json([
             'usuarios' => User::where('status', 'Activo')->get(),
@@ -18,20 +17,24 @@ class AsignacionController extends Controller
         ]);
     }
 
-    // Procesa la asignación masiva
     public function asignarMasivo(Request $request) {
         $request->validate([
             'cliente_ids' => 'required|array',
-            'user_id' => 'required|exists:users,id',
-            'campana_id' => 'required|exists:campanas,id',
-            'estado_id' => 'required|exists:estados,id',
+            'user_id' => 'nullable|exists:users,id',
+            'campana_id' => 'nullable|exists:campanas,id',
+            'estado_id' => 'nullable|exists:estados,id',
         ]);
 
-        Cliente::whereIn('id', $request->cliente_ids)->update([
-            'user_id' => $request->user_id,
-            'campana_id' => $request->campana_id,
-            'estado_id' => $request->estado_id,
-        ]);
+        // Solo preparamos para actualizar los campos que el usuario SÍ envió
+        $updateData = [];
+        if ($request->filled('user_id')) $updateData['user_id'] = $request->user_id;
+        if ($request->filled('campana_id')) $updateData['campana_id'] = $request->campana_id;
+        if ($request->filled('estado_id')) $updateData['estado_id'] = $request->estado_id;
+
+        // Si hay algo que actualizar, lo hacemos
+        if (!empty($updateData)) {
+            Cliente::whereIn('id', $request->cliente_ids)->update($updateData);
+        }
 
         return response()->json(['message' => 'Clientes asignados correctamente']);
     }
