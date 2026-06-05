@@ -7,6 +7,7 @@ import {
 
 const UserView = () => {
   const [users, setUsers] = useState([]);
+  const [errorMessage, setErrorMessage] = useState(null);
   
   // Modales
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -43,12 +44,14 @@ const UserView = () => {
   // 2. Manejadores de Modales
   const openCreateModal = () => {
     setEditingUser(null);
+    setErrorMessage(null); // Limpiamos errores al abrir
     setFormData({ name: '', email: '', password: '', role: 'agente', status: 'Activo' });
     setIsModalOpen(true);
   };
 
   const openEditModal = (user) => {
     setEditingUser(user);
+    setErrorMessage(null); // Limpiamos errores al abrir
     setFormData({ 
       name: user.name, 
       email: user.email, 
@@ -65,29 +68,58 @@ const UserView = () => {
     setIsDeleteModalOpen(true);
   };
 
-  // 3. Crear o Editar Usuario (Conectado a Laravel)
+  // 3. Crear o Editar Usuario
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setErrorMessage(null); // Limpiamos cualquier error previo al intentar guardar de nuevo
+
+    // --- NUEVA VALIDACIÓN EN EL CLIENTE ---
+    // Si estamos creando un usuario, la contraseña es obligatoria y debe tener 6+ caracteres
+    // Si estamos editando, solo la validamos si el usuario decidió escribir una nueva
+    if (!editingUser || formData.password) {
+      if (formData.password.length < 6) {
+        setErrorMessage("La contraseña debe tener al menos 6 caracteres.");
+        return; // Detenemos la ejecución para que no se envíe la petición
+      }
+    }
+
     try {
+      let response;
+      
       if (editingUser) {
-        // Petición PUT para Editar
-        await fetch(`${API_URL}/${editingUser.id}`, {
+        response = await fetch(`${API_URL}/${editingUser.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
           body: JSON.stringify(formData)
         });
       } else {
-        // Petición POST para Crear
-        await fetch(API_URL, {
+        response = await fetch(API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
           body: JSON.stringify(formData)
         });
       }
-      fetchUsers(); // Recargar la tabla
+
+      // Manejo de errores que vienen del servidor (Laravel)
+      if (!response.ok) {
+        if (response.status === 422) {
+          const errorData = await response.json();
+          // Extraemos y unimos los errores en un solo texto
+          const errorMessages = Object.values(errorData.errors).flat().join(' | ');
+          setErrorMessage(`No se pudo guardar: ${errorMessages}`);
+          return; 
+        }
+        throw new Error(`Error en el servidor: ${response.status}`);
+      }
+
+      // Si todo sale bien, recargamos, cerramos el modal y limpiamos estados
+      fetchUsers(); 
       setIsModalOpen(false);
+      setErrorMessage(null);
+      
     } catch (error) {
       console.error("Error al guardar el usuario:", error);
+      setErrorMessage("Hubo un error de conexión al guardar el usuario.");
     }
   };
 
@@ -211,6 +243,18 @@ const UserView = () => {
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-4">
+              
+              {/* ================= NUEVO: ALERTA DE ERROR VISUAL ================= */}
+              {errorMessage && (
+                <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 rounded-md shadow-sm" role="alert">
+                  <div className="flex items-center">
+                    <span className="text-xl mr-2">⚠️</span>
+                    <p className="font-medium text-sm">{errorMessage}</p>
+                  </div>
+                </div>
+              )}
+              {/* ================================================================= */}
+
               <div>
                 <label className="block mb-1.5 text-xs font-bold text-slate-500 uppercase tracking-wide">Nombre Completo</label>
                 <div className="relative">
