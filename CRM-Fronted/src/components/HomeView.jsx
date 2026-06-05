@@ -1,26 +1,52 @@
+import { useState, useEffect } from 'react';
 import { 
-  FiUsers, FiDollarSign, FiVolume2, FiLifeBuoy, 
+  FiUsers, FiVolume2, FiActivity, FiUser, 
   FiZap, FiUserCheck, FiPackage, FiTrendingUp, FiArrowRight 
 } from 'react-icons/fi';
 
 const HomeView = ({ setActiveTab }) => {
+  // Estado para almacenar los datos reales
+  const [statsData, setStatsData] = useState({
+    clientes: 0,
+    campanas: 0,
+    estados: 0,
+    usuarios: 0
+  });
+
+  // Efecto para obtener los datos al cargar la vista
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        // Asegúrate de que esta URL coincida con tu base URL de la API (ej. localhost:8000)
+        const response = await fetch('http://127.0.0.1:8000/api/dashboard-stats');
+        const data = await response.json();
+        setStatsData(data);
+      } catch (error) {
+        console.error("Error obteniendo estadísticas del dashboard:", error);
+      }
+    };
+
+    fetchStats();
+  }, []);
+
+  // Mapeamos los datos reales a la estructura de las tarjetas
   const stats = [
-    { title: 'CLIENTES', value: '1,245', tag: 'Activos este mes', borderClass: 'border-blue-500', icon: <FiUsers /> },
-    { title: 'VENTAS', value: '348', tag: 'Completadas', borderClass: 'border-green-500', icon: <FiDollarSign /> },
-    { title: 'CAMPAÑAS', value: '12', tag: 'En ejecución', borderClass: 'border-purple-500', icon: <FiVolume2 /> },
-    { title: 'SOPORTE', value: '5', tag: 'Tickets abiertos', borderClass: 'border-orange-500', icon: <FiLifeBuoy /> }
+    { title: 'TOTAL CLIENTES', value: statsData.clientes, tag: 'Registrados en DB', borderClass: 'border-blue-500', icon: <FiUsers /> },
+    { title: 'CAMPAÑAS', value: statsData.campanas, tag: 'Gestiones creadas', borderClass: 'border-purple-500', icon: <FiVolume2 /> },
+    { title: 'ESTADOS', value: statsData.estados, tag: 'Tipos de estados', borderClass: 'border-green-500', icon: <FiActivity /> },
+    { title: 'USUARIOS', value: statsData.usuarios, tag: 'Accesos al sistema', borderClass: 'border-orange-500', icon: <FiUser /> }
   ];
 
   const actions = [
-    { title: 'Gestionar Clientes', desc: 'Crear, editar o eliminar.', bgClass: 'bg-blue-500', icon: <FiUsers />, tab: 'inicio' },
+    { title: 'Gestionar Clientes', desc: 'Crear, editar o eliminar.', bgClass: 'bg-blue-500', icon: <FiUsers />, tab: 'clientes' },
     { title: 'Control Usuarios', desc: 'Asignar roles y accesos.', bgClass: 'bg-indigo-500', icon: <FiUserCheck />, tab: 'usuarios' },
-    { title: 'Catálogo Productos', desc: 'Administrar stock y precios.', bgClass: 'bg-purple-500', icon: <FiPackage />, tab: 'inicio' },
-    { title: 'Métricas de Ventas', desc: 'Ver reportes de rendimiento.', bgClass: 'bg-pink-500', icon: <FiTrendingUp />, tab: 'inicio' }
+    { title: 'Administrar Campañas', desc: 'Ver campañas activas.', bgClass: 'bg-purple-500', icon: <FiPackage />, tab: 'campanas' },
+    { title: 'Asignaciones Masivas', desc: 'Asignar clientes a agentes.', bgClass: 'bg-pink-500', icon: <FiTrendingUp />, tab: 'asignaciones' }
   ];
 
   return (
     <div className="animate-fadeIn">
-      {/* Tarjetas de Estadísticas */}
+      {/* Tarjetas de Estadísticas Reales */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 mb-10">
         {stats.map((stat, i) => (
           <div key={i} className={`bg-white rounded-2xl p-6 relative shadow-sm border-b-4 ${stat.borderClass} overflow-hidden`}>

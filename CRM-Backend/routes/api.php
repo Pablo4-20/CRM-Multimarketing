@@ -8,6 +8,7 @@ use App\Http\Controllers\CampanaController;
 use App\Http\Controllers\EstadoController;
 use App\Http\Controllers\ClienteController;
 use App\Http\Controllers\AsignacionController;
+use App\Http\Controllers\DashboardController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -50,3 +51,21 @@ Route::post('/asignaciones/desasignar', [AsignacionController::class, 'desasigna
 // Rutas para el rol Agente
 Route::get('/agente/clientes/{user_id}', [ClienteController::class, 'getPorAgente']);
 Route::post('/agente/clientes/{id}/comentarios', [ClienteController::class, 'addComentario']);
+
+Route::get('/dashboard-stats', function () {
+    // Agrupamos los clientes por el agente asignado
+    // NOTA: Ajusta 'user_id' si tu llave foránea en la tabla clientes se llama 'agente_id'
+    $agentesData = DB::table('clientes')
+        ->join('users', 'clientes.user_id', '=', 'users.id') 
+        ->select('users.name', DB::raw('count(clientes.id) as value'))
+        ->groupBy('users.id', 'users.name')
+        ->get();
+
+    return response()->json([
+        'clientes' => Cliente::count(),
+        'campanas' => Campana::count(),
+        'estados' => Estado::count(),
+        'usuarios' => User::count(),
+        'agentes_chart' => $agentesData // Enviamos la data para la gráfica
+    ]);
+});
