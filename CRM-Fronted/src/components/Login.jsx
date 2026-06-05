@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import logoImg from '../assets/logo.png';
+import api from "../api";
 
 const Login = ({ onLogin }) => {
   const [email, setEmail] = useState('');
@@ -13,24 +14,27 @@ const Login = ({ onLogin }) => {
     setIsLoading(true);
 
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify({ email, password })
-      });
+      // Usamos Axios en lugar de fetch. 
+      // Ya no necesitamos escribir toda la IP ni los headers, solo la ruta '/login'
+      const response = await api.post('/login', { email, password });
 
-      const data = await response.json();
+      // Axios guarda los datos de respuesta dentro de 'response.data'
+      const data = response.data;
+      
+      onLogin(data.user, data.token);
 
-      if (response.ok) {
-        onLogin(data.user, data.token);
-      } else {
-        setError(data.message || 'Error al iniciar sesión');
-      }
     } catch (err) {
-      setError('No se pudo conectar con el servidor.');
+      // Axios captura los errores de estado (ej: 401 Credenciales incorrectas) aquí
+      if (err.response) {
+        // El backend respondió con un error (ej. mensaje de error de Laravel)
+        setError(err.response.data.message || 'Error al iniciar sesión');
+      } else if (err.request) {
+        // La petición se hizo pero no hubo respuesta (El error ERR_CONNECTION_TIMED_OUT cae aquí)
+        setError('No se pudo conectar con el servidor. Verifica tu red.');
+      } else {
+        // Otro tipo de error
+        setError('Ocurrió un error inesperado.');
+      }
     } finally {
       setIsLoading(false);
     }

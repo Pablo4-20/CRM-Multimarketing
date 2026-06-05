@@ -5,6 +5,7 @@ import {
   FiTag, FiUser
 } from 'react-icons/fi';
 import * as XLSX from 'xlsx';
+import api from '../api';
 
 const ClientesView = ({ user }) => {
   // LÓGICA DE ROLES: Obtenemos el usuario de las props o del localStorage
