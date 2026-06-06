@@ -12,7 +12,8 @@ class Comentario extends Model
     protected $fillable = [
         'cliente_id', 
         'user_id', 
-        'texto'
+        'texto',
+        'estado',
     ];
 
     public function cliente() {

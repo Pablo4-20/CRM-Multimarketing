@@ -112,13 +112,23 @@ class ClienteController extends Controller
     public function addComentario(Request $request, $id) {
         $request->validate([
             'texto' => 'required|string',
-            'user_id' => 'required|exists:users,id' // Necesitamos saber qué agente lo escribió
+            'user_id' => 'required|exists:users,id',
+            'estado_id' => 'nullable|exists:estados,id', // Validamos que el estado exista
+            'estado_nombre' => 'nullable|string'
         ]);
 
+        // 1. Si el agente seleccionó un nuevo estado, actualizamos al Cliente principal
+        if ($request->estado_id) {
+            $cliente = Cliente::findOrFail($id);
+            $cliente->update(['estado_id' => $request->estado_id]);
+        }
+
+        // 2. Creamos el comentario guardando el nombre del estado para el historial
         $comentario = Comentario::create([
             'cliente_id' => $id,
             'user_id' => $request->user_id,
-            'texto' => $request->texto
+            'texto' => $request->texto,
+            'estado' => $request->estado_nombre // Guardamos el nombre ("Interesado", "Vendido", etc.)
         ]);
         $comentario->load('user');
 

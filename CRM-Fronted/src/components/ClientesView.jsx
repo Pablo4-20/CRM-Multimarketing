@@ -2,13 +2,13 @@ import { useState, useEffect } from 'react';
 import { 
   FiSearch, FiX, FiUploadCloud, 
   FiEdit2, FiTrash2, FiUsers, FiDownload, FiAlertTriangle, FiMail, FiPhone, FiVolume2,
-  FiTag, FiUser
+  FiTag, FiUser, FiChevronLeft, FiChevronRight
 } from 'react-icons/fi';
 import * as XLSX from 'xlsx';
 import api from '../api';
 
 const ClientesView = ({ user }) => {
-  // LÓGICA DE ROLES: Obtenemos el usuario de las props o del localStorage
+  // LÓGICA DE ROLES
   const storedUser = localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')) : null;
   const activeUser = user || storedUser;
   const isSuperAdmin = activeUser?.role === 'super-admin';
@@ -32,18 +32,28 @@ const ClientesView = ({ user }) => {
   const [clienteToDelete, setClienteToDelete] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
 
- 
+  // Estados para los filtros
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filtroCampana, setFiltroCampana] = useState('');
+
+  // ESTADOS DE PAGINACIÓN
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(50); // 50 por defecto
 
   useEffect(() => {
     fetchClientes();
     fetchCampanas();
     
-    // Solo cargamos estados y agentes si NO es super-admin
     if (!isSuperAdmin) {
       fetchEstados();
       fetchAgentes();
     }
   }, [isSuperAdmin]);
+
+  // Si el usuario busca o cambia de filtro, lo regresamos a la página 1
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filtroCampana, itemsPerPage]);
 
   const fetchClientes = async () => {
     try {
@@ -100,7 +110,6 @@ const ClientesView = ({ user }) => {
     e.preventDefault();
     setImportError(null);
 
-    // Única validación obligatoria: Debe haber un archivo adjunto
     if (!selectedFile) {
       setImportError("Debes seleccionar un archivo Excel para continuar.");
       return; 
@@ -126,7 +135,6 @@ const ClientesView = ({ user }) => {
           
           if (nombre) {
             if (isSuperAdmin) {
-              // Lógica Super Admin: Lee Campaña y Estado del Excel
               const campana = row['Campaña'] || row['campaña'] || row['Campana'] || row['campana'] || '';
               const estadoExcel = row['Estado'] || row['estado'] || ''; 
               
@@ -136,18 +144,15 @@ const ClientesView = ({ user }) => {
                 telefono: String(telefono).trim(),
                 campana: String(campana).trim(), 
                 estado: String(estadoExcel).trim(),
-                // Asignación automática: Se asigna al Super Admin que sube el archivo
                 user_id: activeUser?.id 
               });
             } else {
-              // Lógica Admin Normal: Lee de los selectores (o deja en nulo si están vacíos)
               clientesAEnviar.push({ 
                 nombre: String(nombre).trim(), 
                 email: String(email).trim(), 
                 telefono: String(telefono).trim(),
                 campana_id: importData.campana_id || null,
                 estado_id: importData.estado_id || null,
-                // Asignación automática: Si el select está vacío, se asigna al Admin que sube el archivo
                 user_id: importData.agente_id || activeUser?.id 
               });
             }
@@ -176,7 +181,6 @@ const ClientesView = ({ user }) => {
   };
 
   const handleDownloadTemplate = () => {
-    // CORREGIDO: Removido el "Agente" de la plantilla del super admin
     const datosEjemplo = isSuperAdmin
       ? [
           { Nombre: "Juan Perez", Email: "juan@ejemplo.com", Telefono: "0991234567", Campaña: "Promoción Black Friday", Estado: "Nuevo" },
@@ -223,21 +227,79 @@ const ClientesView = ({ user }) => {
     }
   };
 
+  // Función para vaciar todos los filtros
+  const limpiarFiltros = () => {
+    setSearchTerm('');
+    setFiltroCampana('');
+  };
+
+  // 1. Lógica de Filtrado General
+  const clientesFiltrados = clientes.filter(cliente => {
+    const searchLower = searchTerm.toLowerCase();
+    const matchTexto = 
+      (cliente.nombre && cliente.nombre.toLowerCase().includes(searchLower)) ||
+      (cliente.telefono && cliente.telefono.includes(searchTerm));
+
+    const matchCampana = filtroCampana ? 
+      (cliente.campana?.id.toString() === filtroCampana.toString() || cliente.campana_id?.toString() === filtroCampana.toString()) 
+      : true;
+
+    return matchTexto && matchCampana;
+  });
+
+  // 2. Lógica de Paginación (Se aplica sobre los filtrados)
+  const isAll = itemsPerPage === 'all';
+  const indexOfLastItem = isAll ? clientesFiltrados.length : currentPage * itemsPerPage;
+  const indexOfFirstItem = isAll ? 0 : indexOfLastItem - itemsPerPage;
+  const currentItems = clientesFiltrados.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = isAll ? 1 : Math.ceil(clientesFiltrados.length / itemsPerPage);
+
   return (
     <div className="animate-fadeIn w-full">
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden w-full">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden w-full flex flex-col h-full">
         
-        <div className="p-5 border-b border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white w-full">
+        {/* HEADER Y FILTROS */}
+        <div className="p-5 border-b border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white w-full shrink-0">
           <div>
             <h3 className="text-lg font-bold text-slate-900 m-0">Directorio de Clientes</h3>
-            <p className="text-xs text-slate-500 mt-1">Importa tu base de datos desde Microsoft Excel</p>
+            <p className="text-xs text-slate-500 mt-1">Gestiona y filtra la base de datos general</p>
           </div>
           
           <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-            <div className="relative w-full sm:w-56">
+            {/* Buscador */}
+            <div className="relative w-full sm:w-64">
               <FiSearch className="absolute left-3 top-2.5 text-slate-400 text-lg" />
-              <input type="text" placeholder="Buscar cliente..." className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 box-border"/>
+              <input 
+                type="text" 
+                placeholder="Buscar nombre o número..." 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 box-border"
+              />
             </div>
+
+            {/* Filtro Campaña */}
+            <select
+              value={filtroCampana}
+              onChange={(e) => setFiltroCampana(e.target.value)}
+              className="w-full sm:w-48 py-2 px-3 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500 font-medium"
+            >
+              <option value="">Todas las Campañas</option>
+              {campanas.map(c => (
+                <option key={c.id} value={c.id}>{c.nombre}</option>
+              ))}
+            </select>
+
+            {/* NUEVO: BOTÓN VACIAR FILTROS (Se oculta si no hay nada escrito/seleccionado) */}
+            {(searchTerm !== '' || filtroCampana !== '') && (
+              <button 
+                onClick={limpiarFiltros}
+                className="flex items-center justify-center gap-1.5 px-3 py-2 bg-red-50 text-red-600 hover:bg-red-100 border border-red-100 rounded-lg text-sm font-semibold transition-colors shrink-0"
+                title="Borrar filtros"
+              >
+                <FiX size={16} /> Limpiar
+              </button>
+            )}
             
             <button 
               onClick={openUploadModal}
@@ -248,7 +310,58 @@ const ClientesView = ({ user }) => {
           </div>
         </div>
 
-        <div className="w-full overflow-x-auto">
+        {/* CONTROLES DE PAGINACIÓN (SUPERIOR) */}
+        <div className="p-3 px-5 border-b border-slate-200 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-4 shrink-0">
+          
+          {/* Info de conteo y selector de items por página */}
+          <div className="flex flex-col sm:flex-row items-center gap-4 text-sm text-slate-500">
+            <div>
+              Mostrando <span className="font-semibold text-slate-700">{clientesFiltrados.length === 0 ? 0 : indexOfFirstItem + 1}</span> a <span className="font-semibold text-slate-700">{Math.min(indexOfLastItem, clientesFiltrados.length)}</span> de <span className="font-semibold text-slate-700">{clientesFiltrados.length}</span> clientes
+            </div>
+            
+            <div className="flex items-center gap-2 border-l border-slate-300 pl-4">
+              <span className="font-medium text-slate-600">Mostrar:</span>
+              <select
+                value={itemsPerPage}
+                onChange={(e) => setItemsPerPage(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                className="bg-white border border-slate-300 text-slate-700 text-xs rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-1.5 outline-none cursor-pointer"
+              >
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value="all">Todos</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Botones de navegación (solo se muestran si hay más de 1 página) */}
+          {!isAll && totalPages > 1 && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className="flex items-center gap-1 px-3 py-1.5 border border-slate-300 rounded-lg text-sm font-medium bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <FiChevronLeft /> Anterior
+              </button>
+              
+              <span className="text-sm font-semibold text-slate-600 px-2">
+                Página {currentPage} de {totalPages}
+              </span>
+              
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                className="flex items-center gap-1 px-3 py-1.5 border border-slate-300 rounded-lg text-sm font-medium bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Siguiente <FiChevronRight />
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* TABLA DE DATOS */}
+        <div className="w-full overflow-x-auto flex-1">
           <table className="w-full text-left border-collapse min-w-[900px]">
             <thead>
               <tr className="bg-slate-50 text-slate-500 font-bold text-[11px] uppercase tracking-wider border-b border-slate-200">
@@ -260,9 +373,9 @@ const ClientesView = ({ user }) => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
-              {clientes.length === 0 ? (
-                <tr><td colSpan="5" className="text-center p-8 text-slate-400">No hay clientes importados.</td></tr>
-              ) : clientes.map((cliente) => (
+              {currentItems.length === 0 ? (
+                <tr><td colSpan="5" className="text-center p-8 text-slate-400">No se encontraron clientes con esos filtros.</td></tr>
+              ) : currentItems.map((cliente) => (
                 <tr key={cliente.id} className="hover:bg-slate-50/80 transition-colors group">
                   <td className="p-4 pl-6">
                     <div className="flex items-center gap-3">
@@ -306,12 +419,13 @@ const ClientesView = ({ user }) => {
             </tbody>
           </table>
         </div>
+
       </div>
 
+      {/* ======================= MODALES ======================= */}
       {/* MODAL: CARGA MASIVA DE EXCEL */}
       {isUploadModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
-          {/* El contenedor crece dinámicamente según el contenido */}
           <div className="bg-white rounded-2xl shadow-xl border border-slate-100 w-full max-w-lg overflow-hidden animate-slideUp max-h-[95vh] flex flex-col">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-indigo-50 shrink-0">
               <h3 className="text-lg font-bold text-indigo-900 m-0 flex items-center gap-2">
@@ -323,7 +437,6 @@ const ClientesView = ({ user }) => {
             </div>
             
             <form onSubmit={handleUploadSave} className="p-6 flex flex-col gap-4 overflow-y-auto custom-scrollbar">
-              
               {importError && (
                 <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 rounded-md text-sm font-medium flex gap-2 items-start">
                   <FiAlertTriangle className="text-lg shrink-0 mt-0.5" />
@@ -335,7 +448,6 @@ const ClientesView = ({ user }) => {
                 <FiUsers className="text-3xl text-indigo-400 mx-auto mb-2" />
                 <p className="text-sm font-semibold text-slate-700 mb-1">Sube el archivo Excel</p>
                 <p className="text-xs text-slate-500 mb-3">
-                  {/* CORREGIDO: El texto ya no incluye "Agente" */}
                   {isSuperAdmin 
                     ? "Soporta columnas: Nombre, Email, Telefono, Campaña y Estado" 
                     : "Soporta columnas: Nombre, Email y Teléfono"
@@ -355,7 +467,6 @@ const ClientesView = ({ user }) => {
                 </div>
               )}
 
-              {/* CONTROLES OPCIONALES SOLO PARA ADMIN NORMAL */}
               {!isSuperAdmin && (
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4">
                   <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
