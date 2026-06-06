@@ -3,6 +3,7 @@ import {
   FiSearch, FiCheckSquare, FiX, FiUsers, FiTag, FiVolume2, FiUser,
   FiEdit2, FiTrash2, FiAlertTriangle, FiUserMinus
 } from 'react-icons/fi';
+import api from '../api';
 
 const AsignacionesView = () => {
   const [clientes, setClientes] = useState([]);

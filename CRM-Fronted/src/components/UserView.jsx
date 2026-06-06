@@ -4,6 +4,7 @@ import {
   FiFilter, FiPlus, FiX, FiChevronDown, FiLock,
   FiEdit2, FiTrash2, FiAlertTriangle
 } from 'react-icons/fi';
+import api from '../api';
 
 const UserView = () => {
   const [users, setUsers] = useState([]);
@@ -24,7 +25,7 @@ const UserView = () => {
   });
 
   // URL de tu API de Laravel (Asegúrate de tener php artisan serve corriendo)
-  const API_URL = 'http://127.0.0.1:8000/api/users';
+  
 
   // 1. Cargar usuarios desde Laravel al iniciar
   useEffect(() => {
@@ -33,9 +34,8 @@ const UserView = () => {
 
   const fetchUsers = async () => {
     try {
-      const response = await fetch(API_URL);
-      const data = await response.json();
-      setUsers(data);
+      const response = await api.get('/users');
+      setUsers(response.data);
     } catch (error) {
       console.error("Error al conectar con la API:", error);
     }
@@ -71,55 +71,35 @@ const UserView = () => {
   // 3. Crear o Editar Usuario
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setErrorMessage(null); // Limpiamos cualquier error previo al intentar guardar de nuevo
+    setErrorMessage(null);
 
-    // --- NUEVA VALIDACIÓN EN EL CLIENTE ---
-    // Si estamos creando un usuario, la contraseña es obligatoria y debe tener 6+ caracteres
-    // Si estamos editando, solo la validamos si el usuario decidió escribir una nueva
     if (!editingUser || formData.password) {
       if (formData.password.length < 6) {
         setErrorMessage("La contraseña debe tener al menos 6 caracteres.");
-        return; // Detenemos la ejecución para que no se envíe la petición
+        return;
       }
     }
 
     try {
-      let response;
-      
       if (editingUser) {
-        response = await fetch(`${API_URL}/${editingUser.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: JSON.stringify(formData)
-        });
+        await api.put(`/users/${editingUser.id}`, formData);
       } else {
-        response = await fetch(API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: JSON.stringify(formData)
-        });
+        await api.post('/users', formData);
       }
 
-      // Manejo de errores que vienen del servidor (Laravel)
-      if (!response.ok) {
-        if (response.status === 422) {
-          const errorData = await response.json();
-          // Extraemos y unimos los errores en un solo texto
-          const errorMessages = Object.values(errorData.errors).flat().join(' | ');
-          setErrorMessage(`No se pudo guardar: ${errorMessages}`);
-          return; 
-        }
-        throw new Error(`Error en el servidor: ${response.status}`);
-      }
-
-      // Si todo sale bien, recargamos, cerramos el modal y limpiamos estados
       fetchUsers(); 
       setIsModalOpen(false);
       setErrorMessage(null);
       
     } catch (error) {
-      console.error("Error al guardar el usuario:", error);
-      setErrorMessage("Hubo un error de conexión al guardar el usuario.");
+      if (error.response && error.response.status === 422) {
+        const errorData = error.response.data;
+        const errorMessages = Object.values(errorData.errors).flat().join(' | ');
+        setErrorMessage(`No se pudo guardar: ${errorMessages}`);
+      } else {
+        console.error("Error al guardar el usuario:", error);
+        setErrorMessage("Hubo un error de conexión al guardar el usuario.");
+      }
     }
   };
 
@@ -127,12 +107,11 @@ const UserView = () => {
   const handleDelete = async (e) => {
     e.preventDefault();
     try {
-      await fetch(`${API_URL}/${userToDelete.id}`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify({ transfer_to_user_id: transferUserId || null })
+      // Axios envía el body en peticiones DELETE usando la propiedad "data"
+      await api.delete(`/users/${userToDelete.id}`, {
+        data: { transfer_to_user_id: transferUserId || null }
       });
-      fetchUsers(); // Recargar la tabla
+      fetchUsers(); 
       setIsDeleteModalOpen(false);
     } catch (error) {
       console.error("Error al eliminar el usuario:", error);

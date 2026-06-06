@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { FiSearch, FiX, FiUser, FiMail, FiPhone, FiVolume2, FiTag, FiSend, FiClock, FiMessageSquare } from 'react-icons/fi';
+import api from '../api';
 
 const AgenteClientesView = ({ user }) => {
   const [clientes, setClientes] = useState([]);

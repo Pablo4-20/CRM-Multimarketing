@@ -32,7 +32,7 @@ const ClientesView = ({ user }) => {
   const [clienteToDelete, setClienteToDelete] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const API_URL = 'http://127.0.0.1:8000/api/clientes';
+ 
 
   useEffect(() => {
     fetchClientes();
@@ -47,42 +47,30 @@ const ClientesView = ({ user }) => {
 
   const fetchClientes = async () => {
     try {
-      const response = await fetch(API_URL);
-      const data = await response.json();
-      setClientes(data);
-    } catch (error) {
-      console.error("Error al cargar clientes:", error);
-    }
+      const response = await api.get('/clientes');
+      setClientes(response.data);
+    } catch (error) { console.error("Error:", error); }
   };
 
   const fetchCampanas = async () => {
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/campanas');
-      const data = await response.json();
-      setCampanas(data);
-    } catch (error) {
-      console.error("Error al cargar campañas:", error);
-    }
+      const response = await api.get('/campanas');
+      setCampanas(response.data);
+    } catch (error) { console.error("Error:", error); }
   };
 
   const fetchEstados = async () => {
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/estados');
-      const data = await response.json();
-      setEstados(data);
-    } catch (error) {
-      console.error("Error al cargar estados:", error);
-    }
+      const response = await api.get('/estados');
+      setEstados(response.data);
+    } catch (error) { console.error("Error:", error); }
   };
 
   const fetchAgentes = async () => {
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/users');
-      const data = await response.json();
-      setAgentes(data);
-    } catch (error) {
-      console.error("Error al cargar agentes:", error);
-    }
+      const response = await api.get('/users');
+      setAgentes(response.data);
+    } catch (error) { console.error("Error:", error); }
   };
 
   const openUploadModal = () => {
@@ -167,11 +155,7 @@ const ClientesView = ({ user }) => {
         });
 
         if (clientesAEnviar.length > 0) {
-          await fetch(`${API_URL}/masivo`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ clientes: clientesAEnviar })
-          });
+          await api.post('/clientes/masivo', { clientes: clientesAEnviar });
           await fetchClientes(); 
           if (isSuperAdmin) await fetchCampanas(); 
         } else {
@@ -214,11 +198,7 @@ const ClientesView = ({ user }) => {
     if (!formData.nombre) return;
     setIsLoading(true);
     try {
-      await fetch(`${API_URL}/${editingId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
-      });
+      await api.put(`/clientes/${editingId}`, formData);
       await fetchClientes();
       setIsEditModalOpen(false);
     } catch (error) {
@@ -232,7 +212,7 @@ const ClientesView = ({ user }) => {
     if (!clienteToDelete) return;
     setIsLoading(true);
     try {
-      await fetch(`${API_URL}/${clienteToDelete.id}`, { method: 'DELETE' });
+      await api.delete(`/clientes/${clienteToDelete.id}`);
       await fetchClientes();
       setIsDeleteModalOpen(false);
       setClienteToDelete(null);

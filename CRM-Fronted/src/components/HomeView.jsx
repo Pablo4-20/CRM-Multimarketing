@@ -4,6 +4,7 @@ import {
   FiZap, FiUserCheck, FiPackage, FiTrendingUp, FiArrowRight 
 } from 'react-icons/fi';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
+import api from '../api';
 
 const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f97316', '#eab308', '#10b981', '#14b8a6', '#0ea5e9'];
 
@@ -19,19 +20,10 @@ const HomeView = ({ setActiveTab, user }) => {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const response = await fetch('http://127.0.0.1:8000/api/dashboard-stats');
-        
-        const contentType = response.headers.get("content-type");
-        if (contentType && contentType.indexOf("application/json") !== -1) {
-          const data = await response.json();
-          if (response.ok) {
-            setStatsData(data);
-          } else {
-            console.error("Error SQL del backend:", data.message);
-          }
-        } else {
-          console.error("El servidor no devolvió JSON.");
-        }
+        // Axios ya sabe que la base es tu IP gracias a api.js
+        const response = await api.get('/dashboard-stats');
+        // Axios convierte a JSON automáticamente, la info viene en .data
+        setStatsData(response.data);
       } catch (error) {
         console.error("Error de conexión:", error);
       }

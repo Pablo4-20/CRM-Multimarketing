@@ -3,6 +3,7 @@ import {
   FiSearch, FiPlus, FiX, FiUploadCloud, FiFileText, 
   FiEdit2, FiTrash2, FiTag, FiDownload, FiAlertTriangle
 } from 'react-icons/fi';
+import api from '../api';
 
 const EstadosView = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -18,7 +19,7 @@ const EstadosView = () => {
   const [estadoToDelete, setEstadoToDelete] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const API_URL = 'http://127.0.0.1:8000/api/estados';
+  
 
   useEffect(() => {
     fetchEstados();
@@ -26,9 +27,8 @@ const EstadosView = () => {
 
   const fetchEstados = async () => {
     try {
-      const response = await fetch(API_URL);
-      const data = await response.json();
-      setEstados(data);
+      const response = await api.get('/estados');
+      setEstados(response.data);
     } catch (error) {
       console.error("Error al cargar estados:", error);
     }
@@ -64,17 +64,9 @@ const EstadosView = () => {
 
     try {
       if (editingId) {
-        await fetch(`${API_URL}/${editingId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ nombre: formData.nombre })
-        });
+        await api.put(`/estados/${editingId}`, { nombre: formData.nombre });
       } else {
-        await fetch(API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ nombre: formData.nombre })
-        });
+        await api.post('/estados', { nombre: formData.nombre });
       }
       await fetchEstados();
       setIsCreateModalOpen(false);
@@ -108,11 +100,7 @@ const EstadosView = () => {
 
       if (estadosAEnviar.length > 0) {
         try {
-          await fetch(`${API_URL}/masivo`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ estados: estadosAEnviar })
-          });
+          await api.post('/estados/masivo', { estados: estadosAEnviar })  ;
           await fetchEstados(); 
         } catch (error) {
           console.error("Error en carga masiva:", error);
@@ -133,7 +121,7 @@ const EstadosView = () => {
     if (!estadoToDelete) return;
     setIsLoading(true);
     try {
-      await fetch(`${API_URL}/${estadoToDelete.id}`, { method: 'DELETE' });
+      await api.delete(`/estados/${estadoToDelete.id}`);
       await fetchEstados();
       setIsDeleteModalOpen(false);
       setEstadoToDelete(null);

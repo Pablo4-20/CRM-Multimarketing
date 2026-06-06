@@ -3,6 +3,7 @@ import {
   FiSearch, FiPlus, FiX, FiUploadCloud, FiFileText, 
   FiEdit2, FiTrash2, FiVolume2, FiDownload, FiAlertTriangle
 } from 'react-icons/fi';
+import api from '../api';
 
 const CampanasView = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -26,12 +27,9 @@ const CampanasView = () => {
 
   const fetchCampanas = async () => {
     try {
-      const response = await fetch(API_URL);
-      const data = await response.json();
-      setCampanas(data);
-    } catch (error) {
-      console.error("Error al cargar campañas:", error);
-    }
+      const response = await api.get('/campanas');
+      setCampanas(response.data);
+    } catch (error) { console.error("Error:", error); }
   };
 
   const openCreateModal = () => {
@@ -61,20 +59,11 @@ const CampanasView = () => {
     e.preventDefault();
     if (!formData.nombre) return;
     setIsLoading(true);
-
     try {
       if (editingId) {
-        await fetch(`${API_URL}/${editingId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ nombre: formData.nombre })
-        });
+        await api.put(`/campanas/${editingId}`, { nombre: formData.nombre });
       } else {
-        await fetch(API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ nombre: formData.nombre })
-        });
+        await api.post('/campanas', { nombre: formData.nombre });
       }
       await fetchCampanas();
       setIsCreateModalOpen(false);
@@ -108,11 +97,7 @@ const CampanasView = () => {
 
       if (campañasAEnviar.length > 0) {
         try {
-          await fetch(`${API_URL}/masivo`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ campanas: campañasAEnviar })
-          });
+          await api.post('/campanas/masivo', { campanas: campañasAEnviar });
           await fetchCampanas(); 
         } catch (error) {
           console.error("Error en carga masiva:", error);
@@ -134,7 +119,7 @@ const CampanasView = () => {
     if (!campanaToDelete) return;
     setIsLoading(true);
     try {
-      await fetch(`${API_URL}/${campanaToDelete.id}`, { method: 'DELETE' });
+      await api.delete(`/campanas/${campanaToDelete.id}`);
       await fetchCampanas();
       setIsDeleteModalOpen(false);
       setCampanaToDelete(null);
