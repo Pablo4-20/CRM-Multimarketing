@@ -31,9 +31,8 @@ const AgenteClientesView = ({ user }) => {
 
   const fetchMisClientes = async () => {
     try {
-      const response = await fetch(`http://127.0.0.1:8000/api/agente/clientes/${user.id}`);
-      const data = await response.json();
-      setClientes(data);
+      const response = await api.get(`/agente/clientes/${user.id}`);
+      setClientes(response.data);
     } catch (error) {
       console.error("Error al cargar mis clientes:", error);
     }
@@ -53,24 +52,16 @@ const AgenteClientesView = ({ user }) => {
 
     setIsLoading(true);
     try {
-      const response = await fetch(`http://127.0.0.1:8000/api/agente/clientes/${selectedCliente.id}/comentarios`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify({ 
-          texto: nuevoComentario, // Tu controlador espera "texto"
-          user_id: user.id
-        })
+      const response = await api.post(`/agente/clientes/${selectedCliente.id}/comentarios`, { 
+        texto: nuevoComentario,
+        user_id: user.id
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        setComentarios([...comentarios, data.comentario]);
-        setNuevoComentario('');
-        await fetchMisClientes(); 
-      }
+      // Con Axios, la respuesta JSON ya está en response.data
+      setComentarios([...comentarios, response.data.comentario]);
+      setNuevoComentario('');
+      await fetchMisClientes(); 
+      
     } catch (error) {
       console.error("Error al guardar el comentario:", error);
     } finally {

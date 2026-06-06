@@ -4,8 +4,8 @@ import axios from 'axios';
 const api = axios.create({
   baseURL: 'http://192.168.100.50:8000/api', // <-- Aquí va tu IP
   headers: {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json'
+    'Content-Type': 'application/json; charset=utf-8',
+    'Accept': 'application/json; charset=utf-8'
   }
 });
 

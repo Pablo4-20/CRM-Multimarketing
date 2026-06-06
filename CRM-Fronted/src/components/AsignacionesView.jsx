@@ -28,9 +28,8 @@ const AsignacionesView = () => {
 
   const fetchClientes = async () => {
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/clientes');
-      const data = await response.json();
-      setClientes(data);
+      const response = await api.get('/clientes');
+      setClientes(response.data);
     } catch (error) {
       console.error("Error al cargar clientes:", error);
     }
@@ -38,16 +37,14 @@ const AsignacionesView = () => {
 
   const fetchDatosModal = async () => {
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/asignaciones/datos');
-      const data = await response.json();
-      setUsuarios(data.usuarios);
-      setCampanas(data.campanas);
-      setEstados(data.estados);
+      const response = await api.get('/asignaciones/datos');
+      setUsuarios(response.data.usuarios);
+      setCampanas(response.data.campanas);
+      setEstados(response.data.estados);
     } catch (error) {
       console.error("Error al cargar datos del modal:", error);
     }
   };
-
   // CHECKBOXES
   const handleSelectAll = (e) => {
     if (e.target.checked) {
@@ -97,22 +94,16 @@ const AsignacionesView = () => {
     e.preventDefault();
     setIsLoading(true);
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/asignaciones/procesar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cliente_ids: selectedIds,
-          user_id: formData.user_id,
-          campana_id: formData.campana_id,
-          estado_id: formData.estado_id
-        })
+      await api.post('/asignaciones/procesar', {
+        cliente_ids: selectedIds,
+        user_id: formData.user_id,
+        campana_id: formData.campana_id,
+        estado_id: formData.estado_id
       });
-
-      if (response.ok) {
-        await fetchClientes(); 
-        setSelectedIds([]); 
-        setIsModalOpen(false);
-      }
+      
+      await fetchClientes(); 
+      setSelectedIds([]); 
+      setIsModalOpen(false);
     } catch (error) {
       console.error("Error en la asignación:", error);
     } finally {
@@ -137,18 +128,14 @@ const AsignacionesView = () => {
   const confirmUnassign = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/asignaciones/desasignar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cliente_ids: idsToUnassign })
+      await api.post('/asignaciones/desasignar', { 
+        cliente_ids: idsToUnassign 
       });
 
-      if (response.ok) {
-        await fetchClientes();
-        setSelectedIds([]);
-        setIdsToUnassign([]);
-        setIsUnassignModalOpen(false);
-      }
+      await fetchClientes();
+      setSelectedIds([]);
+      setIdsToUnassign([]);
+      setIsUnassignModalOpen(false);
     } catch (error) {
       console.error("Error al remover asignaciones:", error);
     } finally {
