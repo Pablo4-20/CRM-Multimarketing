@@ -8,18 +8,18 @@ import api from '../api';
 const CampanasView = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  // NUEVO: Estado para el modal de eliminar
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   
+  const [errorMessage, setErrorMessage] = useState(null);
+
   const [campanas, setCampanas] = useState([]);
   const [formData, setFormData] = useState({ nombre: '' });
   const [selectedFile, setSelectedFile] = useState(null);
   const [editingId, setEditingId] = useState(null);
-  // NUEVO: Guardar la campaña que se va a eliminar
   const [campanaToDelete, setCampanaToDelete] = useState(null); 
   const [isLoading, setIsLoading] = useState(false);
 
-  const API_URL = 'http://127.0.0.1:8000/api/campanas';
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     fetchCampanas();
@@ -32,15 +32,28 @@ const CampanasView = () => {
     } catch (error) { console.error("Error:", error); }
   };
 
+  // 1. MEJORA: Buscador inteligente que ignora tildes al buscar
+  const campanasFiltradas = campanas.filter(camp => {
+    const nombreNormalizado = camp.nombre.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    const busquedaNormalizada = searchTerm.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    return nombreNormalizado.includes(busquedaNormalizada);
+  });
+
+  const clearFilters = () => {
+    setSearchTerm('');
+  };
+
   const openCreateModal = () => {
     setEditingId(null);
     setFormData({ nombre: '' });
+    setErrorMessage(null);
     setIsCreateModalOpen(true);
   };
 
   const openEditModal = (campana) => {
     setEditingId(campana.id);
     setFormData({ nombre: campana.nombre });
+    setErrorMessage(null); 
     setIsCreateModalOpen(true);
   };
 
@@ -49,16 +62,39 @@ const CampanasView = () => {
     setIsUploadModalOpen(true);
   };
 
-  // NUEVO: Abrir modal de eliminar
   const openDeleteModal = (campana) => {
     setCampanaToDelete(campana);
     setIsDeleteModalOpen(true);
   };
+  
+  // 2. MEJORA: Validación robusta para evitar duplicados respetando el idioma español
+  const handleNameChange = (e) => {
+    const value = e.target.value;
+    setFormData({ ...formData, nombre: value }); 
+
+    if (!value.trim()) {
+      setErrorMessage(null);
+      return;
+    }
+
+    // localeCompare con 'base' ignora mayúsculas/minúsculas pero entiende la diferencia entre 'n' y 'ñ'
+    const isDuplicate = campanas.some(
+      c => c.nombre.trim().localeCompare(value.trim(), 'es', { sensitivity: 'base' }) === 0 && c.id !== editingId
+    );
+
+    if (isDuplicate) {
+      setErrorMessage("Ya existe una campaña con este nombre.");
+    } else {
+      setErrorMessage(null); 
+    }
+  };
 
   const handleSaveManual = async (e) => {
     e.preventDefault();
-    if (!formData.nombre) return;
+    if (!formData.nombre || errorMessage) return; 
+    setErrorMessage(null); 
     setIsLoading(true);
+
     try {
       if (editingId) {
         await api.put(`/campanas/${editingId}`, { nombre: formData.nombre });
@@ -67,8 +103,15 @@ const CampanasView = () => {
       }
       await fetchCampanas();
       setIsCreateModalOpen(false);
+      
     } catch (error) {
-      console.error("Error al guardar:", error);
+      if (error.response && error.response.status === 422) {
+        const errorData = error.response.data;
+        const errorMessages = Object.values(errorData.errors).flat().join(' | ');
+        setErrorMessage(errorMessages);
+      } else {
+        setErrorMessage("Hubo un error de conexión al guardar.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -111,10 +154,10 @@ const CampanasView = () => {
       setIsLoading(false);
     };
 
-    reader.readAsText(selectedFile, 'UTF-8');
+    // 3. MEJORA EXTREMA: Leemos el CSV en ISO-8859-1 para soportar los exportados desde Microsoft Excel con tildes
+    reader.readAsText(selectedFile, 'ISO-8859-1');
   };
 
-  // NUEVO: Lógica real de eliminar
   const confirmDelete = async () => {
     if (!campanaToDelete) return;
     setIsLoading(true);
@@ -153,9 +196,26 @@ const CampanasView = () => {
           </div>
           
           <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-            <div className="relative w-full sm:w-56">
-              <FiSearch className="absolute left-3 top-2.5 text-slate-400 text-lg" />
-              <input type="text" placeholder="Buscar campaña..." className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 box-border"/>
+            <div className="relative flex items-center w-full sm:w-64 gap-2">
+              <div className="relative w-full">
+                <FiSearch className="absolute left-3 top-2.5 text-slate-400 text-lg" />
+                <input 
+                  type="text" 
+                  placeholder="Buscar campaña..." 
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 box-border"
+                />
+                {searchTerm && (
+                  <button 
+                    onClick={clearFilters}
+                    className="absolute right-2 top-2.5 text-slate-400 hover:text-red-500 transition-colors"
+                    title="Limpiar búsqueda"
+                  >
+                    <FiX />
+                  </button>
+                )}
+              </div>
             </div>
             
             <button 
@@ -183,9 +243,15 @@ const CampanasView = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
-              {campanas.length === 0 ? (
-                <tr><td colSpan="2" className="text-center p-8 text-slate-400">No hay campañas en la base de datos.</td></tr>
-              ) : campanas.map((camp) => (
+              {campanasFiltradas.length === 0 ? (
+                <tr>
+                  <td colSpan="2" className="text-center p-8 text-slate-400">
+                    {campanas.length === 0 
+                      ? 'No hay campañas en la base de datos.' 
+                      : 'No se encontraron campañas con ese nombre.'}
+                  </td>
+                </tr>
+              ) : campanasFiltradas.map((camp) => (
                 <tr key={camp.id} className="hover:bg-slate-50/80 transition-colors group">
                   <td className="p-4 pl-6">
                     <div className="flex items-center gap-3">
@@ -225,18 +291,29 @@ const CampanasView = () => {
             </div>
             
             <form onSubmit={handleSaveManual} className="p-6 flex flex-col gap-4">
+
+              {errorMessage && (
+                <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-3 rounded text-sm font-medium animate-fadeIn">
+                  {errorMessage}
+                </div>
+              )}
+
               <div>
                 <label className="block mb-1.5 text-xs font-bold text-slate-500 uppercase">Nombre de la Campaña</label>
                 <input 
                   type="text" placeholder="Ej. Promo Día de la Madre" required 
-                  value={formData.nombre} onChange={(e) => setFormData({ nombre: e.target.value })} 
+                  value={formData.nombre} onChange={handleNameChange}
                   className="w-full p-3 rounded-xl border border-slate-300 bg-slate-50 focus:bg-white focus:border-blue-500 outline-none text-sm box-border" 
                 />
               </div>
               
               <div className="flex gap-3 mt-2 pt-4 border-t border-slate-100">
                 <button type="button" onClick={() => setIsCreateModalOpen(false)} className="flex-1 p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold rounded-xl text-sm transition-colors">Cancelar</button>
-                <button type="submit" disabled={isLoading} className="flex-1 p-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm transition-colors shadow-sm shadow-blue-200 disabled:bg-blue-400">
+                <button 
+                  type="submit" 
+                  disabled={isLoading || errorMessage !== null || !formData.nombre.trim()} 
+                  className="flex-1 p-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm transition-colors shadow-sm shadow-blue-200 disabled:bg-blue-400 disabled:cursor-not-allowed"
+                >
                   {isLoading ? 'Guardando...' : (editingId ? 'Guardar Cambios' : 'Crear Campaña')}
                 </button>
               </div>
@@ -295,7 +372,6 @@ const CampanasView = () => {
         </div>
       )}
 
-      {/* ================= NUEVO MODAL: ELIMINAR CAMPAÑA ================= */}
       {isDeleteModalOpen && campanaToDelete && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
           <div className="bg-white rounded-2xl shadow-xl border border-slate-100 w-full max-w-sm overflow-hidden animate-slideUp">

@@ -7,28 +7,26 @@ use Illuminate\Http\Request;
 
 class CampanaController extends Controller
 {
-    // 1. Obtener todas las campañas
     public function index()
     {
-        $campanas = Campana::orderBy('id', 'desc')->get();
-        return response()->json($campanas);
+        return response()->json(Campana::orderBy('id', 'desc')->get());
     }
 
-    // 2. Crear UNA campaña (Manual)
     public function store(Request $request)
     {
+        // Convertimos a mayúsculas antes de validar
+        $request->merge(['nombre' => mb_strtoupper(trim($request->nombre), 'UTF-8')]);
+
         $request->validate([
-            'nombre' => 'required|string|max:255'
+            'nombre' => 'required|string|max:255|unique:campanas,nombre'
+        ], [
+            'nombre.unique' => 'Ya existe una campaña con este nombre.'
         ]);
 
-        $campana = Campana::create([
-            'nombre' => $request->nombre
-        ]);
-
+        $campana = Campana::create(['nombre' => $request->nombre]);
         return response()->json($campana, 201);
     }
 
-    // 3. Crear MÚLTIPLES campañas (Carga Masiva desde React)
     public function storeMasivo(Request $request)
     {
         $request->validate([
@@ -38,19 +36,26 @@ class CampanaController extends Controller
 
         $nuevasCampanas = [];
         foreach ($request->campanas as $campData) {
-            $nuevasCampanas[] = Campana::create([
-                'nombre' => $campData['nombre']
-            ]);
+            // Convertimos a mayúsculas
+            $nombreUpper = mb_strtoupper(trim($campData['nombre']), 'UTF-8');
+            
+            // Si ya existe (en mayúsculas) lo ignora, si no, lo crea
+            $campana = Campana::firstOrCreate(['nombre' => $nombreUpper]);
+            $nuevasCampanas[] = $campana;
         }
 
-        return response()->json(['message' => 'Carga masiva exitosa', 'data' => $nuevasCampanas], 201);
+        return response()->json(['message' => 'Carga masiva procesada', 'data' => $nuevasCampanas], 201);
     }
 
-    // 4. Editar el nombre de una campaña
     public function update(Request $request, $id)
     {
+        // Convertimos a mayúsculas antes de validar
+        $request->merge(['nombre' => mb_strtoupper(trim($request->nombre), 'UTF-8')]);
+
         $request->validate([
-            'nombre' => 'required|string|max:255'
+            'nombre' => 'required|string|max:255|unique:campanas,nombre,' . $id
+        ], [
+            'nombre.unique' => 'Ya existe una campaña con este nombre.'
         ]);
 
         $campana = Campana::findOrFail($id);
@@ -60,12 +65,9 @@ class CampanaController extends Controller
         return response()->json($campana);
     }
 
-    // 5. Eliminar una campaña
     public function destroy($id)
     {
-        $campana = Campana::findOrFail($id);
-        $campana->delete();
-
+        Campana::findOrFail($id)->delete();
         return response()->json(['message' => 'Campaña eliminada']);
     }
 }

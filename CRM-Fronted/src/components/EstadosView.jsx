@@ -8,18 +8,19 @@ import api from '../api';
 const EstadosView = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  // NUEVO: Estado para el modal de eliminar
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   
+  const [errorMessage, setErrorMessage] = useState(null);
+
   const [estados, setEstados] = useState([]);
   const [formData, setFormData] = useState({ nombre: '' });
   const [selectedFile, setSelectedFile] = useState(null);
   const [editingId, setEditingId] = useState(null);
-  // NUEVO: Guardar el estado que se va a eliminar
-  const [estadoToDelete, setEstadoToDelete] = useState(null);
+  const [estadoToDelete, setEstadoToDelete] = useState(null); 
   const [isLoading, setIsLoading] = useState(false);
 
-  
+  // Estado para el filtro de búsqueda
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     fetchEstados();
@@ -29,20 +30,31 @@ const EstadosView = () => {
     try {
       const response = await api.get('/estados');
       setEstados(response.data);
-    } catch (error) {
-      console.error("Error al cargar estados:", error);
-    }
+    } catch (error) { console.error("Error:", error); }
+  };
+
+  // 1. Buscador inteligente que ignora tildes y mayúsculas al buscar
+  const estadosFiltrados = estados.filter(est => {
+    const nombreNormalizado = est.nombre.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    const busquedaNormalizada = searchTerm.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    return nombreNormalizado.includes(busquedaNormalizada);
+  });
+
+  const clearFilters = () => {
+    setSearchTerm('');
   };
 
   const openCreateModal = () => {
     setEditingId(null);
     setFormData({ nombre: '' });
+    setErrorMessage(null); // Limpiar errores al abrir
     setIsCreateModalOpen(true);
   };
 
   const openEditModal = (estado) => {
     setEditingId(estado.id);
     setFormData({ nombre: estado.nombre });
+    setErrorMessage(null); // Limpiar errores al abrir
     setIsCreateModalOpen(true);
   };
 
@@ -51,15 +63,37 @@ const EstadosView = () => {
     setIsUploadModalOpen(true);
   };
 
-  // NUEVO: Abrir modal de eliminar
   const openDeleteModal = (estado) => {
     setEstadoToDelete(estado);
     setIsDeleteModalOpen(true);
   };
 
+  // 2. Validación robusta en tiempo real para evitar duplicados respetando el idioma español
+  const handleNameChange = (e) => {
+    const value = e.target.value;
+    setFormData({ ...formData, nombre: value }); 
+
+    if (!value.trim()) {
+      setErrorMessage(null);
+      return;
+    }
+
+    // localeCompare con 'base' ignora mayúsculas/minúsculas pero entiende la diferencia entre 'n' y 'ñ'
+    const isDuplicate = estados.some(
+      est => est.nombre.trim().localeCompare(value.trim(), 'es', { sensitivity: 'base' }) === 0 && est.id !== editingId
+    );
+
+    if (isDuplicate) {
+      setErrorMessage("Ya existe un estado con este nombre.");
+    } else {
+      setErrorMessage(null); 
+    }
+  };
+
   const handleSaveManual = async (e) => {
     e.preventDefault();
-    if (!formData.nombre) return;
+    if (!formData.nombre || errorMessage) return; 
+    setErrorMessage(null); 
     setIsLoading(true);
 
     try {
@@ -70,8 +104,15 @@ const EstadosView = () => {
       }
       await fetchEstados();
       setIsCreateModalOpen(false);
+      
     } catch (error) {
-      console.error("Error al guardar:", error);
+      if (error.response && error.response.status === 422) {
+        const errorData = error.response.data;
+        const errorMessages = Object.values(errorData.errors).flat().join(' | ');
+        setErrorMessage(errorMessages);
+      } else {
+        setErrorMessage("Hubo un error de conexión al guardar.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -100,7 +141,7 @@ const EstadosView = () => {
 
       if (estadosAEnviar.length > 0) {
         try {
-          await api.post('/estados/masivo', { estados: estadosAEnviar })  ;
+          await api.post('/estados/masivo', { estados: estadosAEnviar });
           await fetchEstados(); 
         } catch (error) {
           console.error("Error en carga masiva:", error);
@@ -108,15 +149,16 @@ const EstadosView = () => {
       } else {
         alert("El archivo no tiene nombres válidos.");
       }
+
       setSelectedFile(null);
       setIsUploadModalOpen(false);
       setIsLoading(false);
     };
 
-    reader.readAsText(selectedFile, 'UTF-8');
+    // 3. Leemos el CSV en ISO-8859-1 para soportar archivos de Excel con tildes y eñes
+    reader.readAsText(selectedFile, 'ISO-8859-1');
   };
 
-  // NUEVO: Lógica real de eliminar
   const confirmDelete = async () => {
     if (!estadoToDelete) return;
     setIsLoading(true);
@@ -133,12 +175,12 @@ const EstadosView = () => {
   };
 
   const handleDownloadTemplate = () => {
-    const csvContent = "\uFEFFNombre del Estado\nInteresado\nNo Contesta\nVenta Cerrada\n";
+    const csvContent = "\uFEFFNombre del Estado\nNuevo\nEn Seguimiento\nAgendado\nVendido\nNo Contesta\n";
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", "plantilla_estados.csv");
+    link.setAttribute("download", "plantilla_creacion_estados.csv");
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -151,13 +193,30 @@ const EstadosView = () => {
         <div className="p-5 border-b border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white w-full">
           <div>
             <h3 className="text-lg font-bold text-slate-900 m-0">Gestión de Estados</h3>
-            <p className="text-xs text-slate-500 mt-1">Configura los estados para clasificar a tus clientes</p>
+            <p className="text-xs text-slate-500 mt-1">Configura las etapas del embudo de ventas</p>
           </div>
           
           <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-            <div className="relative w-full sm:w-56">
-              <FiSearch className="absolute left-3 top-2.5 text-slate-400 text-lg" />
-              <input type="text" placeholder="Buscar estado..." className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 box-border"/>
+            <div className="relative flex items-center w-full sm:w-64 gap-2">
+              <div className="relative w-full">
+                <FiSearch className="absolute left-3 top-2.5 text-slate-400 text-lg" />
+                <input 
+                  type="text" 
+                  placeholder="Buscar estado..." 
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 box-border"
+                />
+                {searchTerm && (
+                  <button 
+                    onClick={clearFilters}
+                    className="absolute right-2 top-2.5 text-slate-400 hover:text-red-500 transition-colors"
+                    title="Limpiar búsqueda"
+                  >
+                    <FiX />
+                  </button>
+                )}
+              </div>
             </div>
             
             <button 
@@ -185,9 +244,15 @@ const EstadosView = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
-              {estados.length === 0 ? (
-                <tr><td colSpan="2" className="text-center p-8 text-slate-400">No hay estados en la base de datos.</td></tr>
-              ) : estados.map((estado) => (
+              {estadosFiltrados.length === 0 ? (
+                <tr>
+                  <td colSpan="2" className="text-center p-8 text-slate-400">
+                    {estados.length === 0 
+                      ? 'No hay estados en la base de datos.' 
+                      : 'No se encontraron estados con ese nombre.'}
+                  </td>
+                </tr>
+              ) : estadosFiltrados.map((estado) => (
                 <tr key={estado.id} className="hover:bg-slate-50/80 transition-colors group">
                   <td className="p-4 pl-6">
                     <div className="flex items-center gap-3">
@@ -199,7 +264,7 @@ const EstadosView = () => {
                   </td>
                   <td className="p-4 text-center">
                     <div className="flex items-center justify-center gap-2">
-                      <button onClick={() => openEditModal(estado)} className="p-2 text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors" title="Editar">
+                      <button onClick={() => openEditModal(estado)} className="p-2 text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors" title="Editar Nombre">
                         <FiEdit2 size={16} />
                       </button>
                       <button onClick={() => openDeleteModal(estado)} className="p-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors" title="Eliminar">
@@ -227,18 +292,29 @@ const EstadosView = () => {
             </div>
             
             <form onSubmit={handleSaveManual} className="p-6 flex flex-col gap-4">
+
+              {errorMessage && (
+                <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-3 rounded text-sm font-medium animate-fadeIn">
+                  {errorMessage}
+                </div>
+              )}
+
               <div>
                 <label className="block mb-1.5 text-xs font-bold text-slate-500 uppercase">Nombre del Estado</label>
                 <input 
-                  type="text" placeholder="Ej. Cliente Potencial" required 
-                  value={formData.nombre} onChange={(e) => setFormData({ nombre: e.target.value })} 
+                  type="text" placeholder="Ej. En Seguimiento" required 
+                  value={formData.nombre} onChange={handleNameChange}
                   className="w-full p-3 rounded-xl border border-slate-300 bg-slate-50 focus:bg-white focus:border-amber-500 outline-none text-sm box-border" 
                 />
               </div>
               
               <div className="flex gap-3 mt-2 pt-4 border-t border-slate-100">
                 <button type="button" onClick={() => setIsCreateModalOpen(false)} className="flex-1 p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold rounded-xl text-sm transition-colors">Cancelar</button>
-                <button type="submit" disabled={isLoading} className="flex-1 p-2.5 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl text-sm transition-colors shadow-sm disabled:bg-amber-300">
+                <button 
+                  type="submit" 
+                  disabled={isLoading || errorMessage !== null || !formData.nombre.trim()} 
+                  className="flex-1 p-2.5 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl text-sm transition-colors shadow-sm shadow-amber-200 disabled:bg-amber-300 disabled:cursor-not-allowed"
+                >
                   {isLoading ? 'Guardando...' : (editingId ? 'Guardar Cambios' : 'Crear Estado')}
                 </button>
               </div>
@@ -262,8 +338,8 @@ const EstadosView = () => {
             <form onSubmit={handleUploadSave} className="p-6 flex flex-col gap-4">
               <div className="border-2 border-dashed border-emerald-200 bg-emerald-50/30 rounded-2xl p-6 text-center hover:bg-emerald-50 transition-colors mt-2">
                 <FiFileText className="text-3xl text-emerald-400 mx-auto mb-2" />
-                <p className="text-sm font-semibold text-slate-700 mb-1">Sube el archivo CSV</p>
-                <p className="text-xs text-slate-500 mb-3">Recomendado formato .CSV delimitado por comas</p>
+                <p className="text-sm font-semibold text-slate-700 mb-1">Sube el archivo CSV con los nombres</p>
+                <p className="text-xs text-slate-500 mb-3">Descarga nuestra plantilla para evitar errores</p>
                 
                 <label className="bg-white border border-emerald-200 text-emerald-700 px-4 py-2 rounded-lg text-sm font-bold cursor-pointer hover:bg-emerald-50 shadow-sm inline-block">
                   Seleccionar Archivo
@@ -273,7 +349,7 @@ const EstadosView = () => {
 
               <div className="flex justify-center -mt-2 mb-2">
                 <button type="button" onClick={handleDownloadTemplate} className="flex items-center gap-2 text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors">
-                  <FiDownload /> Descargar plantilla CSV
+                  <FiDownload /> Descargar plantilla CSV de ejemplo
                 </button>
               </div>
 
@@ -289,7 +365,7 @@ const EstadosView = () => {
                   Cancelar
                 </button>
                 <button type="submit" disabled={!selectedFile || isLoading} className={`flex-1 p-2.5 font-semibold rounded-xl text-sm transition-colors ${selectedFile ? 'bg-emerald-600 text-white shadow-md hover:bg-emerald-700' : 'bg-slate-200 text-slate-400 cursor-not-allowed'} disabled:bg-emerald-400`}>
-                  {isLoading ? 'Procesando...' : 'Leer y Crear'}
+                  {isLoading ? 'Procesando...' : 'Leer Archivo y Crear'}
                 </button>
               </div>
             </form>
@@ -297,7 +373,6 @@ const EstadosView = () => {
         </div>
       )}
 
-      {/* ================= NUEVO MODAL: ELIMINAR ESTADO ================= */}
       {isDeleteModalOpen && estadoToDelete && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
           <div className="bg-white rounded-2xl shadow-xl border border-slate-100 w-full max-w-sm overflow-hidden animate-slideUp">

@@ -2,13 +2,14 @@ import { useState, useEffect } from 'react';
 import { 
   FiShield, FiUser, FiMail, FiSearch, 
   FiFilter, FiPlus, FiX, FiChevronDown, FiLock,
-  FiEdit2, FiTrash2, FiAlertTriangle
+  FiEdit2, FiTrash2, FiAlertTriangle , FiCheckCircle
 } from 'react-icons/fi';
 import api from '../api';
 
 const UserView = () => {
   const [users, setUsers] = useState([]);
   const [errorMessage, setErrorMessage] = useState(null);
+  const [successMessage, setSuccessMessage] = useState(null);
   
   // Modales
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -19,13 +20,15 @@ const UserView = () => {
   const [userToDelete, setUserToDelete] = useState(null);
   const [transferUserId, setTransferUserId] = useState('');
   
+  // ======================= NUEVO: ESTADOS DE FILTROS =======================
+  const [searchTerm, setSearchTerm] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
+  // =========================================================================
+
   // Estado del formulario
   const [formData, setFormData] = useState({ 
     name: '', email: '', password: '', role: 'agente', status: 'Activo' 
   });
-
-  // URL de tu API de Laravel (Asegúrate de tener php artisan serve corriendo)
-  
 
   // 1. Cargar usuarios desde Laravel al iniciar
   useEffect(() => {
@@ -41,21 +44,37 @@ const UserView = () => {
     }
   };
 
+  // ======================= NUEVO: LÓGICA DE FILTRADO =======================
+  const filteredUsers = users.filter((user) => {
+    // Filtra por nombre (ignora mayúsculas/minúsculas)
+    const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase());
+    // Filtra por rol (si roleFilter está vacío, muestra todos)
+    const matchesRole = roleFilter === '' || user.role === roleFilter;
+    
+    return matchesSearch && matchesRole;
+  });
+
+  const clearFilters = () => {
+    setSearchTerm('');
+    setRoleFilter('');
+  };
+  // =========================================================================
+
   // 2. Manejadores de Modales
   const openCreateModal = () => {
     setEditingUser(null);
-    setErrorMessage(null); // Limpiamos errores al abrir
+    setErrorMessage(null);
     setFormData({ name: '', email: '', password: '', role: 'agente', status: 'Activo' });
     setIsModalOpen(true);
   };
 
   const openEditModal = (user) => {
     setEditingUser(user);
-    setErrorMessage(null); // Limpiamos errores al abrir
+    setErrorMessage(null);
     setFormData({ 
       name: user.name, 
       email: user.email, 
-      password: '', // La contraseña se deja en blanco por seguridad
+      password: '',
       role: user.role, 
       status: user.status || 'Activo' 
     });
@@ -103,18 +122,31 @@ const UserView = () => {
     }
   };
 
-  // 4. Eliminar Usuario y Transferir Datos (Conectado a Laravel)
+  // 4. Eliminar Usuario y Transferir Datos
   const handleDelete = async (e) => {
     e.preventDefault();
     try {
-      // Axios envía el body en peticiones DELETE usando la propiedad "data"
       await api.delete(`/users/${userToDelete.id}`, {
         data: { transfer_to_user_id: transferUserId || null }
       });
+      
       fetchUsers(); 
       setIsDeleteModalOpen(false);
+      setTransferUserId(''); 
+
+      if (transferUserId) {
+        setSuccessMessage("Agente eliminado y todo su historial fue transferido exitosamente.");
+      } else {
+        setSuccessMessage("Agente eliminado exitosamente.");
+      }
+
+      setTimeout(() => {
+        setSuccessMessage(null);
+      }, 3500);
+
     } catch (error) {
       console.error("Error al eliminar el usuario:", error);
+      setErrorMessage("Hubo un error al intentar eliminar el agente.");
     }
   };
 
@@ -128,8 +160,16 @@ const UserView = () => {
   };
 
   return (
-    <div className="animate-fadeIn w-full">
+    <div className="animate-fadeIn w-full relative">
       
+      {/* NOTIFICACIÓN FLOTANTE DE ÉXITO */}
+      {successMessage && (
+        <div className="fixed bottom-6 right-6 bg-emerald-50 border-l-4 border-emerald-500 text-emerald-800 p-4 rounded-lg shadow-lg z-[100] animate-slideUp flex items-center gap-3">
+          <FiCheckCircle className="text-emerald-500 text-xl shrink-0" />
+          <p className="font-semibold text-sm">{successMessage}</p>
+        </div>
+      )}
+
       {/* ======================= TABLA DE USUARIOS ======================= */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden w-full">
         <div className="p-5 border-b border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white w-full">
@@ -139,14 +179,44 @@ const UserView = () => {
           </div>
           
           <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+            {/* INPUT DE BÚSQUEDA POR NOMBRE */}
             <div className="relative w-full sm:w-64">
               <FiSearch className="absolute left-3 top-2.5 text-slate-400 text-lg" />
-              <input type="text" placeholder="Buscar usuario..." className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 box-border"/>
+              <input 
+                type="text" 
+                placeholder="Buscar por nombre..." 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 box-border"
+              />
             </div>
             
-            <button className="flex items-center justify-center gap-2 px-4 py-2 border border-slate-200 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors w-full sm:w-auto">
-              <FiFilter /> Filtros
-            </button>
+            {/* SELECTOR DE ROL */}
+            <div className="relative w-full sm:w-48">
+              <FiFilter className="absolute left-3 top-2.5 text-slate-400 text-lg" />
+              <select 
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value)}
+                className="w-full pl-10 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none box-border text-slate-600 font-medium"
+              >
+                <option value="">Todos los roles</option>
+                <option value="super-admin">Super Admin</option>
+                <option value="admin">Admin</option>
+                <option value="agente">Agente</option>
+              </select>
+              <FiChevronDown className="absolute right-3 top-3 text-slate-500 pointer-events-none" />
+            </div>
+
+            {/* BOTÓN LIMPIAR FILTROS (Solo aparece si hay algún filtro activo) */}
+            {(searchTerm || roleFilter) && (
+              <button 
+                onClick={clearFilters}
+                className="flex items-center justify-center gap-2 px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium transition-colors w-full sm:w-auto"
+                title="Limpiar filtros"
+              >
+                <FiX /> Limpiar
+              </button>
+            )}
 
             <button onClick={openCreateModal} className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition-all text-sm w-full sm:w-auto shrink-0">
               <FiPlus className="text-lg" /> Nuevo Usuario
@@ -165,9 +235,14 @@ const UserView = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
-              {users.length === 0 ? (
-                <tr><td colSpan="4" className="text-center p-8 text-slate-400">No hay usuarios o no hay conexión con Laravel.</td></tr>
-              ) : users.map((user) => (
+              {/* Cambiamos 'users' por 'filteredUsers' */}
+              {filteredUsers.length === 0 ? (
+                <tr>
+                  <td colSpan="4" className="text-center p-8 text-slate-400">
+                    {users.length === 0 ? 'No hay usuarios o no hay conexión con Laravel.' : 'No se encontraron usuarios con esos filtros.'}
+                  </td>
+                </tr>
+              ) : filteredUsers.map((user) => (
                 <tr key={user.id} className="hover:bg-slate-50/80 transition-colors group">
                   <td className="p-4 pl-6">
                     <div className="flex items-center gap-3">
@@ -189,7 +264,6 @@ const UserView = () => {
                   </td>
                   <td className="p-4">{getRoleBadge(user.role)}</td>
                   
-                  {/* BOTONES DE EDICIÓN Y ELIMINACIÓN */}
                   <td className="p-4 text-center">
                     <div className="flex items-center justify-center gap-2">
                       <button onClick={() => openEditModal(user)} className="p-2 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors" title="Editar">
@@ -223,7 +297,6 @@ const UserView = () => {
 
             <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-4">
               
-              {/* ================= NUEVO: ALERTA DE ERROR VISUAL ================= */}
               {errorMessage && (
                 <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 rounded-md shadow-sm" role="alert">
                   <div className="flex items-center">
@@ -232,7 +305,6 @@ const UserView = () => {
                   </div>
                 </div>
               )}
-              {/* ================================================================= */}
 
               <div>
                 <label className="block mb-1.5 text-xs font-bold text-slate-500 uppercase tracking-wide">Nombre Completo</label>
@@ -329,7 +401,6 @@ const UserView = () => {
                     className="w-full pl-3 pr-8 py-2.5 rounded-lg border border-slate-300 bg-white focus:border-blue-500 outline-none text-sm font-medium text-slate-700 appearance-none box-border"
                   >
                     <option value="">No transferir (Se perderán los datos)</option>
-                    {/* Lista todos los usuarios MENOS el que se va a eliminar */}
                     {users.filter(u => u.id !== userToDelete.id).map(u => (
                       <option key={u.id} value={u.id}>Transferir a: {u.name}</option>
                     ))}

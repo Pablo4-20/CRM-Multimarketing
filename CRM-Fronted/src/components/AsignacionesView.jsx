@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { 
   FiSearch, FiCheckSquare, FiX, FiUsers, FiTag, FiVolume2, FiUser,
-  FiEdit2, FiTrash2, FiAlertTriangle, FiUserMinus
+  FiEdit2, FiTrash2, FiAlertTriangle, FiUserMinus, FiFilter
 } from 'react-icons/fi';
 import api from '../api';
 
@@ -12,7 +12,7 @@ const AsignacionesView = () => {
   // Modales
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isUnassignModalOpen, setIsUnassignModalOpen] = useState(false);
-  const [idsToUnassign, setIdsToUnassign] = useState([]); // Guarda los IDs que se van a "limpiar"
+  const [idsToUnassign, setIdsToUnassign] = useState([]); 
   
   const [usuarios, setUsuarios] = useState([]);
   const [campanas, setCampanas] = useState([]);
@@ -20,6 +20,13 @@ const AsignacionesView = () => {
 
   const [formData, setFormData] = useState({ user_id: '', campana_id: '', estado_id: '' });
   const [isLoading, setIsLoading] = useState(false);
+
+  // ======================= NUEVO: ESTADOS DE FILTROS =======================
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterAgente, setFilterAgente] = useState('');
+  const [filterCampana, setFilterCampana] = useState('');
+  const [filterEstado, setFilterEstado] = useState('');
+  // =========================================================================
 
   useEffect(() => {
     fetchClientes();
@@ -45,10 +52,39 @@ const AsignacionesView = () => {
       console.error("Error al cargar datos del modal:", error);
     }
   };
-  // CHECKBOXES
+
+  // ======================= NUEVO: LÓGICA DE FILTRADO =======================
+  const clientesFiltrados = clientes.filter(cliente => {
+    // 1. Filtro por búsqueda de texto (nombre)
+    const matchSearch = cliente.nombre.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    // 2. Filtros por selectores (Agente, Campaña, Estado)
+    // Permite buscar por un ID específico, o por "unassigned" (los que no tienen dato)
+    const matchAgente = filterAgente === '' || 
+      (filterAgente === 'unassigned' ? !cliente.user : cliente.user?.id.toString() === filterAgente);
+      
+    const matchCampana = filterCampana === '' || 
+      (filterCampana === 'unassigned' ? !cliente.campana : cliente.campana?.id.toString() === filterCampana);
+      
+    const matchEstado = filterEstado === '' || 
+      (filterEstado === 'unassigned' ? !cliente.estado : cliente.estado?.id.toString() === filterEstado);
+
+    return matchSearch && matchAgente && matchCampana && matchEstado;
+  });
+
+  const clearFilters = () => {
+    setSearchTerm('');
+    setFilterAgente('');
+    setFilterCampana('');
+    setFilterEstado('');
+  };
+  // =========================================================================
+
+  // CHECKBOXES (Ajustados para funcionar solo con los filtrados)
   const handleSelectAll = (e) => {
     if (e.target.checked) {
-      setSelectedIds(clientes.map(c => c.id));
+      // Si selecciona todo, solo selecciona los que están visibles bajo los filtros actuales
+      setSelectedIds(clientesFiltrados.map(c => c.id));
     } else {
       setSelectedIds([]);
     }
@@ -62,9 +98,7 @@ const AsignacionesView = () => {
     }
   };
 
-  // ==========================================
   // ASIGNAR / EDITAR
-  // ==========================================
   const openAssignModalBulk = () => {
     if (selectedIds.length === 0) return;
     if (selectedIds.length === 1) {
@@ -81,7 +115,7 @@ const AsignacionesView = () => {
   };
 
   const openAssignModalSingle = (cliente) => {
-    setSelectedIds([cliente.id]); // Seleccionamos solo este para editarlo
+    setSelectedIds([cliente.id]); 
     setFormData({
       user_id: cliente.user_id || '',
       campana_id: cliente.campana_id || '',
@@ -111,9 +145,7 @@ const AsignacionesView = () => {
     }
   };
 
-  // ==========================================
   // REMOVER ASIGNACIÓN (ELIMINAR)
-  // ==========================================
   const openUnassignModalSingle = (id) => {
     setIdsToUnassign([id]);
     setIsUnassignModalOpen(true);
@@ -147,37 +179,94 @@ const AsignacionesView = () => {
     <div className="animate-fadeIn w-full">
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden w-full">
         
-        {/* HEADER */}
-        <div className="p-5 border-b border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white w-full">
-          <div>
-            <h3 className="text-lg font-bold text-slate-900 m-0">Asignación de Clientes</h3>
-            <p className="text-xs text-slate-500 mt-1">Selecciona clientes y asígnalos a tu equipo</p>
-          </div>
+        {/* HEADER Y FILTROS */}
+        <div className="p-5 border-b border-slate-200 bg-white w-full flex flex-col gap-4">
           
-          <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-            <div className="relative w-full sm:w-56">
-              <FiSearch className="absolute left-3 top-2.5 text-slate-400 text-lg" />
-              <input type="text" placeholder="Buscar cliente..." className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500 box-border"/>
+          {/* Fila 1: Títulos y Botones de Acción */}
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+              <h3 className="text-lg font-bold text-slate-900 m-0">Asignación de Clientes</h3>
+              <p className="text-xs text-slate-500 mt-1">Selecciona clientes y asígnalos a tu equipo</p>
             </div>
             
-            {/* BOTONES MASIVOS (Solo se activan si hay seleccionados) */}
-            {selectedIds.length > 0 && (
-              <button 
-                onClick={openUnassignModalBulk}
-                className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium transition-all text-sm w-full sm:w-auto shrink-0 border border-red-200 text-red-600 bg-red-50 hover:bg-red-100"
-              >
-                <FiUserMinus className="text-lg" /> Remover ({selectedIds.length})
-              </button>
-            )}
+            <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+              {selectedIds.length > 0 && (
+                <button 
+                  onClick={openUnassignModalBulk}
+                  className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium transition-all text-sm w-full sm:w-auto shrink-0 border border-red-200 text-red-600 bg-red-50 hover:bg-red-100"
+                >
+                  <FiUserMinus className="text-lg" /> Remover ({selectedIds.length})
+                </button>
+              )}
 
-            <button 
-              onClick={openAssignModalBulk}
-              disabled={selectedIds.length === 0}
-              className={`flex items-center justify-center gap-2 px-5 py-2 rounded-lg font-medium transition-all text-sm w-full sm:w-auto shrink-0 ${selectedIds.length > 0 ? 'bg-slate-800 text-white hover:bg-slate-900 shadow-md' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
-            >
-              <FiCheckSquare className="text-lg" /> Asignar / Editar ({selectedIds.length})
-            </button>
+              <button 
+                onClick={openAssignModalBulk}
+                disabled={selectedIds.length === 0}
+                className={`flex items-center justify-center gap-2 px-5 py-2 rounded-lg font-medium transition-all text-sm w-full sm:w-auto shrink-0 ${selectedIds.length > 0 ? 'bg-slate-800 text-white hover:bg-slate-900 shadow-md' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
+              >
+                <FiCheckSquare className="text-lg" /> Asignar / Editar ({selectedIds.length})
+              </button>
+            </div>
           </div>
+
+          {/* Fila 2: Barra de Filtros */}
+<div className="flex flex-col lg:flex-row gap-3 w-full bg-slate-50/50 p-3 rounded-xl border border-slate-100">
+  {/* Input Nombre */}
+  <div className="relative flex-1 min-w-[200px]">
+    <FiSearch className="absolute left-3 top-2.5 text-slate-400 text-lg" />
+    <input 
+      type="text" 
+      placeholder="Buscar por nombre..." 
+      value={searchTerm}
+      onChange={(e) => setSearchTerm(e.target.value)}
+      className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500 box-border"
+    />
+  </div>
+
+  {/* Select Agente */}
+  <select 
+    value={filterAgente}
+    onChange={(e) => setFilterAgente(e.target.value)}
+    className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 font-medium focus:outline-none focus:ring-2 focus:ring-slate-500 min-w-[140px]"
+  >
+    <option value="">Todos los Agentes</option>
+    <option value="unassigned">Sin Agente</option>
+    {usuarios.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+  </select>
+
+  {/* Select Campaña */}
+  <select 
+    value={filterCampana}
+    onChange={(e) => setFilterCampana(e.target.value)}
+    className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 font-medium focus:outline-none focus:ring-2 focus:ring-slate-500 min-w-[140px]"
+  >
+    <option value="">Todas las Campañas</option>
+    <option value="unassigned">Sin Campaña</option>
+    {campanas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+  </select>
+
+  {/* Select Estado */}
+  <select 
+    value={filterEstado}
+    onChange={(e) => setFilterEstado(e.target.value)}
+    className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 font-medium focus:outline-none focus:ring-2 focus:ring-slate-500 min-w-[140px]"
+  >
+    <option value="">Todos los Estados</option>
+    <option value="unassigned">Sin Estado</option>
+    {estados.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+  </select>
+
+  {/* Botón Limpiar */}
+  {(searchTerm || filterAgente || filterCampana || filterEstado) && (
+    <button 
+      onClick={clearFilters}
+      className="flex items-center justify-center gap-2 px-4 py-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg text-sm font-medium transition-colors shrink-0"
+    >
+      <FiX /> Limpiar
+    </button>
+  )}
+</div>
+
         </div>
 
         {/* TABLA DE ASIGNACIONES */}
@@ -189,7 +278,7 @@ const AsignacionesView = () => {
                   <input 
                     type="checkbox" 
                     onChange={handleSelectAll} 
-                    checked={selectedIds.length === clientes.length && clientes.length > 0}
+                    checked={selectedIds.length === clientesFiltrados.length && clientesFiltrados.length > 0}
                     className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                   />
                 </th>
@@ -201,9 +290,13 @@ const AsignacionesView = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
-              {clientes.length === 0 ? (
-                <tr><td colSpan="6" className="text-center p-8 text-slate-400">No hay clientes importados.</td></tr>
-              ) : clientes.map((cliente) => (
+              {clientesFiltrados.length === 0 ? (
+                <tr>
+                  <td colSpan="6" className="text-center p-8 text-slate-400">
+                    {clientes.length === 0 ? 'No hay clientes importados.' : 'No se encontraron clientes con esos filtros.'}
+                  </td>
+                </tr>
+              ) : clientesFiltrados.map((cliente) => (
                 <tr key={cliente.id} className={`hover:bg-slate-50/80 transition-colors ${selectedIds.includes(cliente.id) ? 'bg-slate-100/60' : ''}`}>
                   <td className="p-4 text-center">
                     <input 
@@ -233,7 +326,6 @@ const AsignacionesView = () => {
                     ) : <span className="text-slate-400 text-xs italic">-</span>}
                   </td>
 
-                  {/* NUEVO: COLUMNA DE ACCIONES INDIVIDUALES */}
                   <td className="p-4 text-center">
                     <div className="flex items-center justify-center gap-2">
                       <button onClick={() => openAssignModalSingle(cliente)} className="p-2 text-slate-500 bg-slate-100 hover:bg-slate-200 hover:text-slate-800 rounded-lg transition-colors" title="Editar Asignación">
@@ -241,9 +333,9 @@ const AsignacionesView = () => {
                       </button>
                       <button 
                         onClick={() => openUnassignModalSingle(cliente.id)} 
-                        className="p-2 text-red-500 bg-red-50 hover:bg-red-100 hover:text-red-700 rounded-lg transition-colors" 
+                        className="p-2 text-red-500 bg-red-50 hover:bg-red-100 hover:text-red-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed" 
                         title="Remover Asignación"
-                        disabled={!cliente.user && !cliente.campana && !cliente.estado} // Deshabilitar si ya está vacío
+                        disabled={!cliente.user && !cliente.campana && !cliente.estado} 
                       >
                         <FiUserMinus size={16} />
                       </button>

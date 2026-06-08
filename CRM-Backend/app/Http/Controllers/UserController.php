@@ -67,17 +67,35 @@ class UserController extends Controller
     // 4. Eliminar y Transferir Datos
     public function destroy(Request $request, $id)
     {
-        $userToDelete = User::findOrFail($id);
+        $user = User::findOrFail($id);
 
-        // Verificamos si se indicó un ID de usuario para transferir los datos
-        if ($request->has('transfer_to_user_id')) {
-            $transferToUser = User::findOrFail($request->transfer_to_user_id);
+        // Verificamos si se envió un ID para transferir los clientes
+        $transferToUserId = $request->input('transfer_to_user_id');
+
+        if ($transferToUserId) {
+            // Validamos que el usuario destino exista
+            $transferUser = User::find($transferToUserId);
             
-           
+            if ($transferUser) {
+                // 1. Transferimos todos los clientes del usuario a eliminar al nuevo usuario
+                \App\Models\Cliente::where('user_id', $user->id)
+                                   ->update(['user_id' => $transferUser->id]);
+                                   
+                // 2. Transferimos TODO EL HISTORIAL (comentarios) al nuevo usuario
+                \App\Models\Comentario::where('user_id', $user->id)
+                                      ->update(['user_id' => $transferUser->id]);
+            }
+        } else {
+            // Si no se transfiere a nadie, los clientes quedan sin asignar
+            \App\Models\Cliente::where('user_id', $user->id)
+                               ->update(['user_id' => null]);
+                               
+            // Nota: Si no hay transferencia, los comentarios se eliminarán o quedarán huérfanos
+            // dependiendo de cómo hayas configurado la base de datos (onDelete cascade).
         }
 
-        $userToDelete->delete();
+        $user->delete();
 
-        return response()->json(['message' => 'Usuario eliminado y datos transferidos (si aplicaba).']);
+        return response()->json(['message' => 'Usuario eliminado y todo su historial transferido correctamente']);
     }
 }
