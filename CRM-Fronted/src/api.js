@@ -1,13 +1,10 @@
 import axios from 'axios';
 
-// DETECCIÓN DINÁMICA: 
-// Si un usuario entra desde la VPN (ej. 10.6.12.5), usará esa IP para el backend.
-// Si entra desde la red local (192.168.18.39), usará la local.
-const serverIP = window.location.hostname;
-
 const api = axios.create({
-  baseURL: `http://${serverIP}:8000/api`, 
+  baseURL: 'http://192.168.18.39:8000/api', // <-- Aquí va tu IP
   headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
     'Content-Type': 'application/json; charset=utf-8',
     'Accept': 'application/json; charset=utf-8'
   }

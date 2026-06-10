@@ -1,14 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { 
   FiSearch, FiX, FiUser, FiMail, FiPhone, FiVolume2, 
-  FiTag, FiSend, FiMessageSquare, FiChevronLeft, FiChevronRight 
+  FiTag, FiSend, FiMessageSquare, FiChevronLeft, FiChevronRight,
+  FiCalendar, FiClock, FiCheckCircle, FiBell
 } from 'react-icons/fi';
 import api from '../api';
 
 const AgenteClientesView = ({ user }) => {
   const [clientes, setClientes] = useState([]);
   const [estados, setEstados] = useState([]);
-  const [campanas, setCampanas] = useState([]); // Nuevo: Para el filtro de campañas
+  const [campanas, setCampanas] = useState([]); 
   
   const [selectedCliente, setSelectedCliente] = useState(null);
   const [comentarios, setComentarios] = useState([]);
@@ -18,14 +19,30 @@ const AgenteClientesView = ({ user }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   
+  // NOTIFICACIONES PROVISIONALES (Éxitos, errores cortos)
+  const [notificacion, setNotificacion] = useState({ show: false, mensaje: '' });
+  
+  // ESTADO EXCLUSIVO PARA ALERTAS CRÍTICAS (No desaparece hasta que el usuario acepte)
+  const [alertaCita, setAlertaCita] = useState({ show: false, mensaje: '' });
+  
+  // ESTADOS DE AGENDAMIENTO
+  const [isAgendarModalOpen, setIsAgendarModalOpen] = useState(false);
+  const [fechaCita, setFechaCita] = useState('');
+  const [notaCita, setNotaCita] = useState('');
+  const [minDateTime, setMinDateTime] = useState('');
+  const [citasProgramadas, setCitasProgramadas] = useState([]);
+  
+  // ESTADOS DE PESTAÑAS (TABS)
+  const [activeTab, setActiveTab] = useState('gestion'); 
+
   const comentariosEndRef = useRef(null);
 
-  // NUEVOS: ESTADOS PARA FILTROS Y PAGINACIÓN
+  // ESTADOS PARA FILTROS Y PAGINACIÓN
   const [searchTerm, setSearchTerm] = useState('');
   const [filtroCampana, setFiltroCampana] = useState('');
   const [filtroEstado, setFiltroEstado] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(50); // 50 por defecto
+  const [itemsPerPage, setItemsPerPage] = useState(50); 
 
   useEffect(() => {
     if (user?.id) {
@@ -35,7 +52,6 @@ const AgenteClientesView = ({ user }) => {
     }
   }, [user]);
 
-  // Si el usuario cambia algún filtro, lo regresamos a la página 1
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, filtroCampana, filtroEstado, itemsPerPage]);
@@ -44,7 +60,57 @@ const AgenteClientesView = ({ user }) => {
     if (comentariosEndRef.current) {
       comentariosEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [comentarios]);
+  }, [comentarios, activeTab]);
+
+  useEffect(() => {
+    if (isAgendarModalOpen) {
+      const now = new Date();
+      now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+      setMinDateTime(now.toISOString().slice(0, 16));
+    }
+  }, [isAgendarModalOpen]);
+
+  // Revisor de citas en segundo plano (Alerta persistente + Sonido)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const ahora = new Date().getTime();
+      const diezMinutosMs = 10 * 60 * 1000;
+
+      setCitasProgramadas(prevCitas => {
+        let hayCambios = false;
+        const citasActualizadas = prevCitas.map(cita => {
+          if (!cita.notificada) {
+            const tiempoRestante = cita.fecha - ahora;
+            
+            // Si faltan 10 minutos o menos para la cita
+            if (tiempoRestante > 0 && tiempoRestante <= diezMinutosMs) {
+              hayCambios = true;
+              
+              // 1. Reproducir el sonido
+              try {
+                const sonidoDeAlerta = new Audio('/alerta.mp3');
+                sonidoDeAlerta.play().catch(error => console.log("El navegador bloqueó el autoplay del audio:", error));
+              } catch (error) {
+                console.error("Error al instanciar el audio:", error);
+              }
+
+              // 2. Activamos el estado de la alerta visual crítica
+              setAlertaCita({
+                show: true,
+                mensaje: `Tienes una cita agendada con el cliente ${cita.clienteNombre} en menos de 10 minutos.`
+              });
+              
+              return { ...cita, notificada: true };
+            }
+          }
+          return cita;
+        });
+        return hayCambios ? citasActualizadas : prevCitas;
+      });
+    }, 20000); // Revisa cada 20 segundos
+
+    return () => clearInterval(interval);
+  }, []);
 
   const fetchMisClientes = async () => {
     try {
@@ -78,7 +144,68 @@ const AgenteClientesView = ({ user }) => {
     setComentarios(cliente.comentarios || []); 
     setNuevoComentario('');
     setNuevoEstadoId(cliente.estado?.id || ''); 
+    setActiveTab('gestion');
     setIsModalOpen(true);
+  };
+
+  // Notificaciones comunes de éxito (Se cierran solas)
+  const lanzarNotificacionExito = (mensaje) => {
+    setNotificacion({ show: true, mensaje });
+    setTimeout(() => {
+      setNotificacion({ show: false, mensaje: '' });
+    }, 5000);
+  };
+
+  const handleGuardarCita = async (e) => {
+    e.preventDefault();
+    if (!fechaCita) return;
+
+    const fechaSeleccionada = new Date(fechaCita);
+    if (fechaSeleccionada <= new Date()) {
+      setAlertaCita({ show: true, mensaje: "No puedes agendar una cita en una fecha u hora pasada." });
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const fechaFormateada = fechaSeleccionada.toLocaleString('es-ES', { 
+        dateStyle: 'medium', 
+        timeStyle: 'short' 
+      });
+      
+      const textoComentario = `📅 Cita agendada para el ${fechaFormateada}.\n${notaCita ? `Nota: ${notaCita}` : ''}`;
+      
+      const responseComentario = await api.post(`/agente/clientes/${selectedCliente.id}/comentarios`, {
+        texto: textoComentario,
+        user_id: user.id,
+        estado_id: nuevoEstadoId || selectedCliente.estado?.id, 
+        estado_nombre: selectedCliente.estado?.nombre
+      });
+
+      setComentarios([...comentarios, responseComentario.data.comentario]);
+      
+      setCitasProgramadas(prev => [...prev, {
+        id: Date.now(),
+        clienteNombre: selectedCliente.nombre,
+        fecha: fechaSeleccionada.getTime(),
+        notificada: false
+      }]);
+
+      await fetchMisClientes(); 
+      
+      setIsAgendarModalOpen(false);
+      setFechaCita('');
+      setNotaCita('');
+      setActiveTab('citas'); 
+      lanzarNotificacionExito(`Cita programada con éxito para el ${fechaFormateada}`);
+
+    } catch (error) {
+      console.error("Error al agendar la cita:", error);
+      lanzarNotificacionExito("Hubo un error al guardar la cita.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleEnviarComentario = async (e) => {
@@ -107,6 +234,8 @@ const AgenteClientesView = ({ user }) => {
         estado: estadoSeleccionado || prev.estado
       }));
 
+      lanzarNotificacionExito("Gestión guardada correctamente.");
+
     } catch (error) {
       console.error("Error al guardar el comentario:", error);
     } finally {
@@ -125,7 +254,10 @@ const AgenteClientesView = ({ user }) => {
     }
   };
 
-  // 1. Lógica de Filtrado General
+  const comentariosNormales = comentarios.filter(c => !c.texto?.includes('📅 Cita agendada'));
+  const historialCitas = comentarios.filter(c => c.texto?.includes('📅 Cita agendada'));
+  const datosPestañaActual = activeTab === 'gestion' ? comentariosNormales : historialCitas;
+
   const clientesFiltrados = clientes.filter(cliente => {
     const searchLower = searchTerm.toLowerCase();
     const matchTexto = 
@@ -149,7 +281,6 @@ const AgenteClientesView = ({ user }) => {
     setFiltroEstado('');
   };
 
-  // 2. Lógica de Paginación (Sobre los filtrados)
   const isAll = itemsPerPage === 'all';
   const indexOfLastItem = isAll ? clientesFiltrados.length : currentPage * itemsPerPage;
   const indexOfFirstItem = isAll ? 0 : indexOfLastItem - itemsPerPage;
@@ -157,7 +288,35 @@ const AgenteClientesView = ({ user }) => {
   const totalPages = isAll ? 1 : Math.ceil(clientesFiltrados.length / itemsPerPage);
 
   return (
-    <div className="animate-fadeIn w-full flex flex-col h-full">
+    <div className="animate-fadeIn w-full flex flex-col h-full relative">
+      
+      {/* 1. NOTIFICACIONES DE ÉXITO COMUNES (Flotante verde tradicional) */}
+      {notificacion.show && (
+        <div className="fixed bottom-6 right-6 px-5 py-4 rounded-xl shadow-2xl flex items-center gap-3 z-[100] animate-slideUp text-white bg-teal-600">
+          <FiCheckCircle size={24} className="text-teal-200" />
+          <span className="font-semibold text-sm max-w-[300px]">{notificacion.mensaje}</span>
+        </div>
+      )}
+
+      {/* 2. ALERTA CRÍTICA INDEPENDIENTE (No desaparece nunca hasta presionar "Entendido") */}
+      {alertaCita.show && (
+        <div className="fixed bottom-6 right-6 p-5 rounded-2xl shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-5 z-[110] animate-slideUp text-white bg-amber-600 border border-amber-500 max-w-md border-box">
+          <div className="flex items-start gap-3">
+            <FiBell size={28} className="text-amber-100 animate-bounce mt-0.5 shrink-0" />
+            <div>
+              <h5 className="text-xs font-bold text-amber-100 uppercase tracking-wider m-0">Recordatorio importante</h5>
+              <p className="font-semibold text-sm leading-snug mt-1 m-0">{alertaCita.mensaje}</p>
+            </div>
+          </div>
+          <button 
+            onClick={() => setAlertaCita({ show: false, mensaje: '' })}
+            className="w-full sm:w-auto px-4 py-2.5 bg-amber-800 hover:bg-amber-900 border border-amber-700 rounded-xl text-xs font-bold transition-all shadow-sm shrink-0 tracking-wide"
+          >
+            Entendido, Aceptar
+          </button>
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden w-full flex flex-col h-full">
         
         {/* HEADER Y FILTROS */}
@@ -168,7 +327,6 @@ const AgenteClientesView = ({ user }) => {
           </div>
           
           <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto">
-            {/* Buscador */}
             <div className="relative w-full sm:w-64">
               <FiSearch className="absolute left-3 top-2.5 text-slate-400 text-lg" />
               <input 
@@ -180,7 +338,6 @@ const AgenteClientesView = ({ user }) => {
               />
             </div>
 
-            {/* Filtro Campaña */}
             <select
               value={filtroCampana}
               onChange={(e) => setFiltroCampana(e.target.value)}
@@ -192,7 +349,6 @@ const AgenteClientesView = ({ user }) => {
               ))}
             </select>
 
-            {/* Filtro Estado */}
             <select
               value={filtroEstado}
               onChange={(e) => setFiltroEstado(e.target.value)}
@@ -204,7 +360,6 @@ const AgenteClientesView = ({ user }) => {
               ))}
             </select>
 
-            {/* Botón Limpiar */}
             {(searchTerm !== '' || filtroCampana !== '' || filtroEstado !== '') && (
               <button 
                 onClick={limpiarFiltros}
@@ -217,7 +372,7 @@ const AgenteClientesView = ({ user }) => {
           </div>
         </div>
 
-        {/* CONTROLES DE PAGINACIÓN (SUPERIOR) */}
+        {/* CONTROLES DE PAGINACIÓN */}
         <div className="p-3 px-5 border-b border-slate-200 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-4 shrink-0">
           <div className="flex flex-col sm:flex-row items-center gap-4 text-sm text-slate-500">
             <div>
@@ -287,7 +442,7 @@ const AgenteClientesView = ({ user }) => {
                         <div className="font-semibold text-slate-900">{cliente.nombre}</div>
                         {cliente.comentarios && cliente.comentarios.length > 0 && (
                           <div className="text-[10px] text-teal-600 font-medium flex items-center gap-1 mt-0.5">
-                            <FiMessageSquare/> {cliente.comentarios.length} comentarios
+                            <FiMessageSquare/> {cliente.comentarios.length} registros
                           </div>
                         )}
                       </div>
@@ -318,7 +473,7 @@ const AgenteClientesView = ({ user }) => {
         </div>
       </div>
 
-      {/* MODAL DEL CLIENTE */}
+      {/* MODAL DEL CLIENTE (Principal) */}
       {isModalOpen && selectedCliente && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
           <div className="bg-white rounded-2xl shadow-xl border border-slate-100 w-[200vw] max-w-[1600px] h-[90vh] overflow-hidden animate-slideUp flex flex-col">
@@ -362,45 +517,67 @@ const AgenteClientesView = ({ user }) => {
                     <p className="text-amber-800 font-semibold text-sm">{selectedCliente.estado?.nombre || 'Sin estado'}</p>
                   </div>
                 </div>
+
+                <button 
+                  onClick={() => setIsAgendarModalOpen(true)}
+                  className="mt-2 w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 hover:border-indigo-300 rounded-xl font-bold transition-all shadow-sm"
+                >
+                  <FiCalendar size={18} />
+                  Agendar Cita
+                </button>
               </div>
 
-              {/* Columna Derecha */}
+              {/* Columna Derecha (Tabs) */}
               <div className="w-full md:w-7/12 flex flex-col bg-slate-50">
                 
-                <div className="p-4 border-b border-slate-200 bg-white shrink-0">
-                  <h4 className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                    <FiMessageSquare className="text-teal-500"/> Historial de Gestión
-                  </h4>
+                <div className="flex border-b border-slate-200 bg-white shrink-0">
+                  <button 
+                    onClick={() => setActiveTab('gestion')}
+                    className={`flex-1 py-4 text-sm font-bold flex items-center justify-center gap-2 border-b-2 transition-colors ${activeTab === 'gestion' ? 'border-teal-500 text-teal-700 bg-teal-50/50' : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}
+                  >
+                    <FiMessageSquare className={activeTab === 'gestion' ? 'text-teal-500' : ''}/> 
+                    Gestión ({comentariosNormales.length})
+                  </button>
+                  <button 
+                    onClick={() => setActiveTab('citas')}
+                    className={`flex-1 py-4 text-sm font-bold flex items-center justify-center gap-2 border-b-2 transition-colors ${activeTab === 'citas' ? 'border-indigo-500 text-indigo-700 bg-indigo-50/50' : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}
+                  >
+                    <FiCalendar className={activeTab === 'citas' ? 'text-indigo-500' : ''}/> 
+                    Citas ({historialCitas.length})
+                  </button>
                 </div>
 
                 <div className="flex-1 p-6 overflow-y-auto flex flex-col gap-4 bg-slate-50 min-h-[300px]">
-                  {comentarios.length === 0 ? (
+                  {datosPestañaActual.length === 0 ? (
                     <div className="m-auto text-center text-slate-400 flex flex-col items-center gap-2">
-                      <FiMessageSquare size={32} className="opacity-20" />
-                      <p className="text-sm">No hay gestiones registradas aún.</p>
+                      {activeTab === 'gestion' ? <FiMessageSquare size={32} className="opacity-20" /> : <FiCalendar size={32} className="opacity-20" />}
+                      <p className="text-sm">
+                        {activeTab === 'gestion' ? 'No hay gestiones registradas aún.' : 'No hay citas agendadas para este cliente.'}
+                      </p>
                     </div>
                   ) : (
-                    comentarios.map((comentario, index) => {
+                    datosPestañaActual.map((comentario, index) => {
                       const agentName = comentario.user?.name || user?.name || 'Agente';
                       const initials = agentName.substring(0, 2).toUpperCase();
                       const dateObj = comentario.created_at ? new Date(comentario.created_at) : new Date();
                       const formattedDate = dateObj.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
                       const formattedTime = dateObj.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+                      const isCita = activeTab === 'citas';
 
                       return (
                         <div key={comentario.id || index} className="flex gap-3 animate-fadeIn">
                           <div className="flex-shrink-0">
-                            <div className="w-10 h-10 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center font-bold text-sm shadow-sm border border-teal-50">
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow-sm border ${isCita ? 'bg-indigo-100 text-indigo-700 border-indigo-50' : 'bg-teal-100 text-teal-700 border-teal-50'}`}>
                               {initials}
                             </div>
                           </div>
 
-                          <div className="flex-1 bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
+                          <div className={`flex-1 bg-white border rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow ${isCita ? 'border-indigo-100' : 'border-slate-200'}`}>
                             <div className="flex justify-between items-start">
                               <div>
                                 <h4 className="text-base font-bold text-slate-900">{agentName}</h4>
                                 <span className={`mt-1.5 inline-block px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider ${getStatusBadge(comentario.estado)}`}>
-                                  {comentario.estado || 'Gestión Registrada'}
+                                  {comentario.estado || (isCita ? 'Cita Agendada' : 'Gestión Registrada')}
                                 </span>
                               </div>
                               <div className="text-right">
@@ -417,55 +594,123 @@ const AgenteClientesView = ({ user }) => {
                   <div ref={comentariosEndRef} />
                 </div>
 
-                <div className="p-4 bg-white border-t border-slate-200 shrink-0">
-                  <form onSubmit={handleEnviarComentario} className="flex flex-col gap-2">
-                    
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1"><FiTag/> Estado del cliente:</span>
-                      <select
-                        value={nuevoEstadoId}
-                        onChange={(e) => setNuevoEstadoId(e.target.value)}
-                        className="text-xs font-semibold p-1.5 rounded-md border border-slate-300 bg-slate-50 text-slate-700 outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 cursor-pointer"
-                      >
-                        <option value="">-- Seleccionar estado --</option>
-                        {estados.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
-                      </select>
-                    </div>
-
-                    <div className="flex items-end gap-2">
-                      <div className="flex-1 relative">
-                        <textarea 
-                          value={nuevoComentario}
-                          onChange={(e) => setNuevoComentario(e.target.value)}
-                          placeholder="Escribe una nueva gestión o nota de seguimiento..."
-                          className="w-full pl-4 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white resize-none max-h-32 min-h-[50px]"
-                          rows="2"
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !e.shiftKey) {
-                              e.preventDefault();
-                              handleEnviarComentario(e);
-                            }
-                          }}
-                        ></textarea>
-                      </div>
+                {activeTab === 'gestion' && (
+                  <div className="p-4 bg-white border-t border-slate-200 shrink-0">
+                    <form onSubmit={handleEnviarComentario} className="flex flex-col gap-2">
                       
-                      <button 
-                        type="submit" 
-                        disabled={isLoading || !nuevoComentario.trim() || !nuevoEstadoId} 
-                        title={!nuevoEstadoId ? "Selecciona un estado primero" : "Enviar"}
-                        className="p-3 bg-teal-600 hover:bg-teal-700 text-white rounded-xl transition-colors shadow-sm disabled:bg-slate-300 disabled:cursor-not-allowed shrink-0 h-[50px] w-[50px] flex items-center justify-center"
-                      >
-                        <FiSend className={isLoading ? "animate-pulse" : ""} />
-                      </button>
-                    </div>
-                  </form>
-                </div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1"><FiTag/> Estado del cliente:</span>
+                        <select
+                          value={nuevoEstadoId}
+                          onChange={(e) => setNuevoEstadoId(e.target.value)}
+                          className="text-xs font-semibold p-1.5 rounded-md border border-slate-300 bg-slate-50 text-slate-700 outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 cursor-pointer"
+                        >
+                          <option value="">-- Seleccionar estado --</option>
+                          {estados.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+                        </select>
+                      </div>
 
+                      <div className="flex items-end gap-2">
+                        <div className="flex-1 relative">
+                          <textarea 
+                            value={nuevoComentario}
+                            onChange={(e) => setNuevoComentario(e.target.value)}
+                            placeholder="Escribe una nueva gestión o nota de seguimiento..."
+                            className="w-full pl-4 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white resize-none max-h-32 min-h-[50px]"
+                            rows="2"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                handleEnviarComentario(e);
+                              }
+                            }}
+                          ></textarea>
+                        </div>
+                        
+                        <button 
+                          type="submit" 
+                          disabled={isLoading || !nuevoComentario.trim() || !nuevoEstadoId} 
+                          title={!nuevoEstadoId ? "Selecciona un estado primero" : "Enviar"}
+                          className="p-3 bg-teal-600 hover:bg-teal-700 text-white rounded-xl transition-colors shadow-sm disabled:bg-slate-300 disabled:cursor-not-allowed shrink-0 h-[50px] w-[50px] flex items-center justify-center"
+                        >
+                          <FiSend className={isLoading ? "animate-pulse" : ""} />
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                )}
               </div>
             </div>
           </div>
         </div>
       )}
+
+      {/* MODAL DE AGENDAR CITA (Secundario) */}
+      {isAgendarModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-slideUp">
+            
+            <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-indigo-50">
+              <h3 className="text-lg font-bold text-indigo-900 m-0 flex items-center gap-2">
+                <FiCalendar className="text-indigo-600" /> Nueva Cita
+              </h3>
+              <button 
+                onClick={() => setIsAgendarModalOpen(false)} 
+                className="text-slate-400 hover:text-slate-600 p-1 bg-white border border-slate-200 rounded-md shadow-sm"
+              >
+                <FiX size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleGuardarCita} className="p-6">
+              <div className="mb-4">
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+                  <FiClock /> Fecha y Hora
+                </label>
+                <input 
+                  type="datetime-local" 
+                  value={fechaCita}
+                  min={minDateTime}
+                  onChange={(e) => setFechaCita(e.target.value)}
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  required
+                />
+              </div>
+
+              <div className="mb-6">
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+                  <FiMessageSquare /> Nota para la cita (Opcional)
+                </label>
+                <textarea 
+                  value={notaCita}
+                  onChange={(e) => setNotaCita(e.target.value)}
+                  placeholder="Ej: Llamar para confirmar presupuesto..."
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none h-24"
+                ></textarea>
+              </div>
+
+              <div className="flex gap-3">
+                <button 
+                  type="button"
+                  onClick={() => setIsAgendarModalOpen(false)}
+                  className="flex-1 py-3 px-4 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit"
+                  disabled={!fechaCita || isLoading}
+                  className="flex-1 py-3 px-4 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors disabled:bg-slate-300 flex items-center justify-center gap-2"
+                >
+                  {isLoading ? 'Guardando...' : 'Confirmar Cita'}
+                </button>
+              </div>
+            </form>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
