@@ -2,9 +2,42 @@ import { useState, useEffect, useRef } from 'react';
 import { 
   FiSearch, FiX, FiUser, FiMail, FiPhone, FiVolume2, 
   FiTag, FiSend, FiMessageSquare, FiChevronLeft, FiChevronRight,
-  FiCalendar, FiClock, FiCheckCircle, FiBell
+  FiCalendar, FiClock, FiCheckCircle, FiBell, FiStar
 } from 'react-icons/fi';
 import api from '../api';
+
+// --- FUNCIÓN PARA DETECTAR SI LA CITA ES FUTURA (PENDIENTE) O PASADA (COMPLETADA) ---
+const verificarCitaPendiente = (texto) => {
+  if (!texto) return false;
+  try {
+    // 1. Intentar formato numérico (ej: 10/6/2026, 15:30)
+    const matchNumerico = texto.match(/para el (\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4}),?\s+(\d{1,2}):(\d{2})/);
+    if (matchNumerico) {
+      const dia = parseInt(matchNumerico[1]);
+      const mes = parseInt(matchNumerico[2]) - 1; // Meses en JS son 0-11
+      const anio = parseInt(matchNumerico[3]);
+      const hora = parseInt(matchNumerico[4]);
+      const min = parseInt(matchNumerico[5]);
+      return new Date(anio, mes, dia, hora, min) > new Date();
+    }
+
+    // 2. Intentar formato de texto (ej: 10 jun 2026, 15:30)
+    const matchTexto = texto.match(/para el (\d{1,2})\s+(?:de\s+)?([a-zA-Z]{3})[a-zA-Z\.]*\s+(?:de\s+)?(\d{4}),?\s+(\d{1,2}):(\d{2})/i);
+    if (matchTexto) {
+      const meses = {"ene":0,"feb":1,"mar":2,"abr":3,"may":4,"jun":5,"jul":6,"ago":7,"sep":8,"oct":9,"nov":10,"dic":11};
+      const dia = parseInt(matchTexto[1]);
+      const mes = meses[matchTexto[2].toLowerCase()] !== undefined ? meses[matchTexto[2].toLowerCase()] : 0;
+      const anio = parseInt(matchTexto[3]);
+      const hora = parseInt(matchTexto[4]);
+      const min = parseInt(matchTexto[5]);
+      return new Date(anio, mes, dia, hora, min) > new Date();
+    }
+  } catch (e) {
+    console.error("Error parseando fecha:", e);
+  }
+  
+  return false; // Si ya pasó o no se pudo leer, se marca como completada por defecto
+};
 
 const AgenteClientesView = ({ user }) => {
   const [clientes, setClientes] = useState([]);
@@ -19,10 +52,8 @@ const AgenteClientesView = ({ user }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   
-  // NOTIFICACIONES PROVISIONALES (Éxitos, errores cortos)
+  // NOTIFICACIONES
   const [notificacion, setNotificacion] = useState({ show: false, mensaje: '' });
-  
-  // ESTADO EXCLUSIVO PARA ALERTAS CRÍTICAS (No desaparece hasta que el usuario acepte)
   const [alertaCita, setAlertaCita] = useState({ show: false, mensaje: '' });
   
   // ESTADOS DE AGENDAMIENTO
@@ -70,6 +101,22 @@ const AgenteClientesView = ({ user }) => {
     }
   }, [isAgendarModalOpen]);
 
+  // Sincronizar citas existentes en la base de datos (hidratación inicial)
+  useEffect(() => {
+    if (clientes.length > 0) {
+      const citasDetectadas = [];
+      clientes.forEach(cliente => {
+        if (cliente.comentarios) {
+          cliente.comentarios.forEach(comentario => {
+            if (comentario.texto && comentario.texto.includes('📅 Cita agendada')) {
+              // Aquí a futuro se puede extraer la fecha exacta si se añade el campo a la BD.
+            }
+          });
+        }
+      });
+    }
+  }, [clientes]);
+
   // Revisor de citas en segundo plano (Alerta persistente + Sonido)
   useEffect(() => {
     const interval = setInterval(() => {
@@ -82,19 +129,16 @@ const AgenteClientesView = ({ user }) => {
           if (!cita.notificada) {
             const tiempoRestante = cita.fecha - ahora;
             
-            // Si faltan 10 minutos o menos para la cita
             if (tiempoRestante > 0 && tiempoRestante <= diezMinutosMs) {
               hayCambios = true;
               
-              // 1. Reproducir el sonido
               try {
                 const sonidoDeAlerta = new Audio('/alerta.mp3');
-                sonidoDeAlerta.play().catch(error => console.log("El navegador bloqueó el autoplay del audio:", error));
+                sonidoDeAlerta.play().catch(error => console.log("Navegador bloqueó autoplay:", error));
               } catch (error) {
-                console.error("Error al instanciar el audio:", error);
+                console.error("Error al instanciar audio:", error);
               }
 
-              // 2. Activamos el estado de la alerta visual crítica
               setAlertaCita({
                 show: true,
                 mensaje: `Tienes una cita agendada con el cliente ${cita.clienteNombre} en menos de 10 minutos.`
@@ -148,7 +192,6 @@ const AgenteClientesView = ({ user }) => {
     setIsModalOpen(true);
   };
 
-  // Notificaciones comunes de éxito (Se cierran solas)
   const lanzarNotificacionExito = (mensaje) => {
     setNotificacion({ show: true, mensaje });
     setTimeout(() => {
@@ -179,8 +222,7 @@ const AgenteClientesView = ({ user }) => {
       const responseComentario = await api.post(`/agente/clientes/${selectedCliente.id}/comentarios`, {
         texto: textoComentario,
         user_id: user.id,
-        estado_id: nuevoEstadoId || selectedCliente.estado?.id, 
-        estado_nombre: selectedCliente.estado?.nombre
+        estado_id: nuevoEstadoId || selectedCliente.estado?.id
       });
 
       setComentarios([...comentarios, responseComentario.data.comentario]);
@@ -215,14 +257,12 @@ const AgenteClientesView = ({ user }) => {
     setIsLoading(true);
     
     const estadoSeleccionado = estados.find(est => est.id.toString() === nuevoEstadoId.toString());
-    const estadoNombre = estadoSeleccionado ? estadoSeleccionado.nombre : '';
 
     try {
       const response = await api.post(`/agente/clientes/${selectedCliente.id}/comentarios`, {
         texto: nuevoComentario,
         user_id: user.id,
-        estado_id: nuevoEstadoId,
-        estado_nombre: estadoNombre
+        estado_id: nuevoEstadoId
       });
 
       setComentarios([...comentarios, response.data.comentario]);
@@ -290,7 +330,7 @@ const AgenteClientesView = ({ user }) => {
   return (
     <div className="animate-fadeIn w-full flex flex-col h-full relative">
       
-      {/* 1. NOTIFICACIONES DE ÉXITO COMUNES (Flotante verde tradicional) */}
+      {/* 1. NOTIFICACIONES DE ÉXITO COMUNES */}
       {notificacion.show && (
         <div className="fixed bottom-6 right-6 px-5 py-4 rounded-xl shadow-2xl flex items-center gap-3 z-[100] animate-slideUp text-white bg-teal-600">
           <FiCheckCircle size={24} className="text-teal-200" />
@@ -298,7 +338,7 @@ const AgenteClientesView = ({ user }) => {
         </div>
       )}
 
-      {/* 2. ALERTA CRÍTICA INDEPENDIENTE (No desaparece nunca hasta presionar "Entendido") */}
+      {/* 2. ALERTA CRÍTICA INDEPENDIENTE */}
       {alertaCita.show && (
         <div className="fixed bottom-6 right-6 p-5 rounded-2xl shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-5 z-[110] animate-slideUp text-white bg-amber-600 border border-amber-500 max-w-md border-box">
           <div className="flex items-start gap-3">
@@ -473,7 +513,7 @@ const AgenteClientesView = ({ user }) => {
         </div>
       </div>
 
-      {/* MODAL DEL CLIENTE (Principal) */}
+      {/* MODAL DEL CLIENTE */}
       {isModalOpen && selectedCliente && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
           <div className="bg-white rounded-2xl shadow-xl border border-slate-100 w-[200vw] max-w-[1600px] h-[90vh] overflow-hidden animate-slideUp flex flex-col">
@@ -562,7 +602,10 @@ const AgenteClientesView = ({ user }) => {
                       const dateObj = comentario.created_at ? new Date(comentario.created_at) : new Date();
                       const formattedDate = dateObj.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
                       const formattedTime = dateObj.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+                      
                       const isCita = activeTab === 'citas';
+                      // Verificamos el estado de la cita usando la función inteligente
+                      const esPendiente = isCita ? verificarCitaPendiente(comentario.texto) : false;
 
                       return (
                         <div key={comentario.id || index} className="flex gap-3 animate-fadeIn">
@@ -576,9 +619,17 @@ const AgenteClientesView = ({ user }) => {
                             <div className="flex justify-between items-start">
                               <div>
                                 <h4 className="text-base font-bold text-slate-900">{agentName}</h4>
-                                <span className={`mt-1.5 inline-block px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider ${getStatusBadge(comentario.estado)}`}>
-                                  {comentario.estado || (isCita ? 'Cita Agendada' : 'Gestión Registrada')}
+                                
+                                {/* AQUI SE AGREGA LA ESTRELLA / VISTO DE FORMA DINAMICA */}
+                                <span className={`mt-1.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider ${getStatusBadge(comentario.estado)}`}>
+                                  {isCita && (
+                                    esPendiente 
+                                      ? <FiStar className="text-amber-500 animate-pulse" size={14} /> 
+                                      : <FiCheckCircle className="text-emerald-500" size={14} />
+                                  )}
+                                  {comentario.estado || (isCita ? (esPendiente ? 'Cita Pendiente' : 'Completada / Pasada') : 'Gestión Registrada')}
                                 </span>
+
                               </div>
                               <div className="text-right">
                                 <div className="text-sm font-semibold text-slate-500 capitalize">{formattedDate}</div>
@@ -645,7 +696,7 @@ const AgenteClientesView = ({ user }) => {
         </div>
       )}
 
-      {/* MODAL DE AGENDAR CITA (Secundario) */}
+      {/* MODAL DE AGENDAR CITA */}
       {isAgendarModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-fadeIn">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-slideUp">

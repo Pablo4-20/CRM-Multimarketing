@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { 
   FiShield, FiUser, FiMail, FiSearch, 
   FiFilter, FiPlus, FiX, FiChevronDown, FiLock,
-  FiEdit2, FiTrash2, FiAlertTriangle , FiCheckCircle
+  FiEdit2, FiTrash2, FiAlertTriangle, FiCheckCircle,
+  FiEye, FiEyeOff // NUEVO: Importación de iconos de visibilidad
 } from 'react-icons/fi';
 import api from '../api';
 
@@ -20,10 +21,12 @@ const UserView = () => {
   const [userToDelete, setUserToDelete] = useState(null);
   const [transferUserId, setTransferUserId] = useState('');
   
-  // ======================= NUEVO: ESTADOS DE FILTROS =======================
+  // Estados de filtros
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
-  // =========================================================================
+
+  // NUEVO: Estado para alternar la visibilidad de la contraseña
+  const [showPassword, setShowPassword] = useState(false);
 
   // Estado del formulario
   const [formData, setFormData] = useState({ 
@@ -44,13 +47,10 @@ const UserView = () => {
     }
   };
 
-  // ======================= NUEVO: LÓGICA DE FILTRADO =======================
+  // Lógica de filtrado
   const filteredUsers = users.filter((user) => {
-    // Filtra por nombre (ignora mayúsculas/minúsculas)
     const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase());
-    // Filtra por rol (si roleFilter está vacío, muestra todos)
     const matchesRole = roleFilter === '' || user.role === roleFilter;
-    
     return matchesSearch && matchesRole;
   });
 
@@ -58,12 +58,12 @@ const UserView = () => {
     setSearchTerm('');
     setRoleFilter('');
   };
-  // =========================================================================
 
   // 2. Manejadores de Modales
   const openCreateModal = () => {
     setEditingUser(null);
     setErrorMessage(null);
+    setShowPassword(false); // NUEVO: Reiniciar la visibilidad al abrir modal
     setFormData({ name: '', email: '', password: '', role: 'agente', status: 'Activo' });
     setIsModalOpen(true);
   };
@@ -71,6 +71,7 @@ const UserView = () => {
   const openEditModal = (user) => {
     setEditingUser(user);
     setErrorMessage(null);
+    setShowPassword(false); // NUEVO: Reiniciar la visibilidad al editar
     setFormData({ 
       name: user.name, 
       email: user.email, 
@@ -207,7 +208,7 @@ const UserView = () => {
               <FiChevronDown className="absolute right-3 top-3 text-slate-500 pointer-events-none" />
             </div>
 
-            {/* BOTÓN LIMPIAR FILTROS (Solo aparece si hay algún filtro activo) */}
+            {/* BOTÓN LIMPIAR FILTROS */}
             {(searchTerm || roleFilter) && (
               <button 
                 onClick={clearFilters}
@@ -235,7 +236,6 @@ const UserView = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
-              {/* Cambiamos 'users' por 'filteredUsers' */}
               {filteredUsers.length === 0 ? (
                 <tr>
                   <td colSpan="4" className="text-center p-8 text-slate-400">
@@ -322,15 +322,32 @@ const UserView = () => {
                 </div>
               </div>
 
+              {/* ======================= NUEVO: CAMPO DE CONTRASEÑA ======================= */}
               <div>
                 <label className="block mb-1.5 text-xs font-bold text-slate-500 uppercase tracking-wide">
                   {editingUser ? 'Nueva Contraseña (Opcional)' : 'Contraseña Temporal'}
                 </label>
                 <div className="relative">
                   <FiLock className="absolute left-3 top-3.5 text-slate-400" />
-                  <input type="password" placeholder="••••••••" required={!editingUser} value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-300 bg-slate-50 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none text-sm font-medium transition-all box-border" />
+                  <input 
+                    type={showPassword ? "text" : "password"} 
+                    placeholder="••••••••" 
+                    required={!editingUser} 
+                    value={formData.password} 
+                    onChange={(e) => setFormData({...formData, password: e.target.value})} 
+                    /* Nota: Aumenté el padding derecho (pr-10) para evitar que el texto quede debajo del icono */
+                    className="w-full pl-9 pr-10 py-2.5 rounded-xl border border-slate-300 bg-slate-50 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none text-sm font-medium transition-all box-border" 
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-3.5 text-slate-400 hover:text-slate-600 focus:outline-none transition-colors"
+                  >
+                    {showPassword ? <FiEyeOff size={18} /> : <FiEye size={18} />}
+                  </button>
                 </div>
               </div>
+              {/* ========================================================================= */}
 
               <div className="grid grid-cols-2 gap-4">
                 <div>

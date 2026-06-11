@@ -360,21 +360,22 @@ const ClientesView = ({ user }) => {
           )}
         </div>
 
-        {/* TABLA DE DATOS */}
+        {/* TABLA DE DATOS ACTUALIZADA CON ESTADO */}
         <div className="w-full overflow-x-auto flex-1">
           <table className="w-full text-left border-collapse min-w-[900px]">
             <thead>
               <tr className="bg-slate-50 text-slate-500 font-bold text-[11px] uppercase tracking-wider border-b border-slate-200">
                 <th className="p-4 pl-6">Nombre del Cliente</th>
-                <th className="p-4">Campaña</th>
                 <th className="p-4">Email</th>
                 <th className="p-4">Teléfono</th>
+                <th className="p-4">Campaña</th>
+                <th className="p-4">Estado</th>
                 <th className="p-4 text-center w-32">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
               {currentItems.length === 0 ? (
-                <tr><td colSpan="5" className="text-center p-8 text-slate-400">No se encontraron clientes con esos filtros.</td></tr>
+                <tr><td colSpan="6" className="text-center p-8 text-slate-400">No se encontraron clientes con esos filtros.</td></tr>
               ) : currentItems.map((cliente) => (
                 <tr key={cliente.id} className="hover:bg-slate-50/80 transition-colors group">
                   <td className="p-4 pl-6">
@@ -384,11 +385,6 @@ const ClientesView = ({ user }) => {
                       </div>
                       <span className="font-semibold text-slate-900">{cliente.nombre}</span>
                     </div>
-                  </td>
-                  <td className="p-4">
-                    {cliente.campana ? (
-                      <span className="flex items-center gap-1.5 text-blue-700 bg-blue-50 border border-blue-100 px-2 py-1 rounded text-xs font-medium w-fit"><FiVolume2/> {cliente.campana.nombre}</span>
-                    ) : <span className="italic text-slate-400 text-xs">Sin campaña</span>}
                   </td>
                   <td className="p-4">
                     {cliente.email ? (
@@ -403,6 +399,16 @@ const ClientesView = ({ user }) => {
                         <FiPhone className="text-slate-400 shrink-0" /> {cliente.telefono}
                       </div>
                     ) : <span className="italic text-slate-400 text-xs">-</span>}
+                  </td>
+                  <td className="p-4">
+                    {cliente.campana ? (
+                      <span className="flex items-center gap-1.5 text-blue-700 bg-blue-50 border border-blue-100 px-2 py-1 rounded text-xs font-medium w-fit"><FiVolume2/> {cliente.campana.nombre}</span>
+                    ) : <span className="italic text-slate-400 text-xs">Sin campaña</span>}
+                  </td>
+                  <td className="p-4">
+                    {cliente.estado ? (
+                      <span className="flex items-center gap-1.5 text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-1 rounded text-xs font-medium w-fit"><FiTag/> {cliente.estado.nombre}</span>
+                    ) : <span className="italic text-slate-400 text-xs">Sin estado</span>}
                   </td>
                   <td className="p-4 text-center">
                     <div className="flex items-center justify-center gap-2">
