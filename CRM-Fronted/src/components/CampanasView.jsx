@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { 
   FiSearch, FiPlus, FiX, FiUploadCloud, FiFileText, 
-  FiEdit2, FiTrash2, FiVolume2, FiDownload, FiAlertTriangle
+  FiEdit2, FiTrash2, FiVolume2, FiDownload, FiAlertTriangle, 
+  FiFilter, FiChevronDown // NUEVO: FiChevronDown agregado
 } from 'react-icons/fi';
 import api from '../api';
 
@@ -19,7 +20,9 @@ const CampanasView = () => {
   const [campanaToDelete, setCampanaToDelete] = useState(null); 
   const [isLoading, setIsLoading] = useState(false);
 
+  // ======================= ESTADOS DE FILTROS Y ORDENAMIENTO =======================
   const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState('newest');
 
   useEffect(() => {
     fetchCampanas();
@@ -32,15 +35,35 @@ const CampanasView = () => {
     } catch (error) { console.error("Error:", error); }
   };
 
-  // 1. MEJORA: Buscador inteligente que ignora tildes al buscar
-  const campanasFiltradas = campanas.filter(camp => {
-    const nombreNormalizado = camp.nombre.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-    const busquedaNormalizada = searchTerm.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-    return nombreNormalizado.includes(busquedaNormalizada);
-  });
+  // ======================= LÓGICA DE FILTRADO Y ORDENAMIENTO =======================
+  const campanasFiltradas = campanas
+    .filter(camp => {
+      const nombreNormalizado = camp.nombre.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+      const busquedaNormalizada = searchTerm.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+      return nombreNormalizado.includes(busquedaNormalizada);
+    })
+    .sort((a, b) => {
+      if (sortBy === 'name-asc') {
+        return (a.nombre || '').localeCompare(b.nombre || '');
+      }
+      if (sortBy === 'name-desc') {
+        return (b.nombre || '').localeCompare(a.nombre || '');
+      }
+      if (sortBy === 'oldest') {
+        return (a.created_at || a.id) > (b.created_at || b.id) ? 1 : -1;
+      }
+      if (sortBy === 'newest') {
+        return (b.created_at || b.id) > (a.created_at || a.id) ? 1 : -1;
+      }
+      return 0;
+    });
+
+  // Condición para mostrar el botón de limpiar filtros
+  const hasActiveFilters = searchTerm !== '' || sortBy !== 'newest';
 
   const clearFilters = () => {
     setSearchTerm('');
+    setSortBy('newest');
   };
 
   const openCreateModal = () => {
@@ -67,7 +90,6 @@ const CampanasView = () => {
     setIsDeleteModalOpen(true);
   };
   
-  // 2. MEJORA: Validación robusta para evitar duplicados respetando el idioma español
   const handleNameChange = (e) => {
     const value = e.target.value;
     setFormData({ ...formData, nombre: value }); 
@@ -77,7 +99,6 @@ const CampanasView = () => {
       return;
     }
 
-    // localeCompare con 'base' ignora mayúsculas/minúsculas pero entiende la diferencia entre 'n' y 'ñ'
     const isDuplicate = campanas.some(
       c => c.nombre.trim().localeCompare(value.trim(), 'es', { sensitivity: 'base' }) === 0 && c.id !== editingId
     );
@@ -154,7 +175,6 @@ const CampanasView = () => {
       setIsLoading(false);
     };
 
-    // 3. MEJORA EXTREMA: Leemos el CSV en ISO-8859-1 para soportar los exportados desde Microsoft Excel con tildes
     reader.readAsText(selectedFile, 'ISO-8859-1');
   };
 
@@ -189,35 +209,52 @@ const CampanasView = () => {
     <div className="animate-fadeIn w-full">
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden w-full">
         
-        <div className="p-5 border-b border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white w-full">
+        <div className="p-5 border-b border-slate-200 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-white w-full">
           <div>
             <h3 className="text-lg font-bold text-slate-900 m-0">Gestión de Campañas</h3>
             <p className="text-xs text-slate-500 mt-1">Crea campañas manualmente o impórtalas masivamente</p>
           </div>
           
-          <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-            <div className="relative flex items-center w-full sm:w-64 gap-2">
-              <div className="relative w-full">
-                <FiSearch className="absolute left-3 top-2.5 text-slate-400 text-lg" />
-                <input 
-                  type="text" 
-                  placeholder="Buscar campaña..." 
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 box-border"
-                />
-                {searchTerm && (
-                  <button 
-                    onClick={clearFilters}
-                    className="absolute right-2 top-2.5 text-slate-400 hover:text-red-500 transition-colors"
-                    title="Limpiar búsqueda"
-                  >
-                    <FiX />
-                  </button>
-                )}
-              </div>
-            </div>
+          <div className="flex flex-col sm:flex-row items-center gap-3 w-full xl:w-auto flex-wrap lg:flex-nowrap">
             
+            <div className="relative w-full sm:w-64">
+              <FiSearch className="absolute left-3 top-2.5 text-slate-400 text-lg" />
+              <input 
+                type="text" 
+                placeholder="Buscar campaña..." 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 box-border"
+              />
+            </div>
+
+            {/* SELECTOR DE ORDENAMIENTO (Unificado con el resto del sistema) */}
+            <div className="relative w-full sm:w-44">
+              <select 
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="w-full pl-3 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none box-border text-slate-600 font-medium"
+              >
+                <option value="newest">Más recientes</option>
+                <option value="oldest">Más antiguas</option>
+                <option value="name-asc">Nombre (A - Z)</option>
+                <option value="name-desc">Nombre (Z - A)</option>
+              </select>
+              <FiChevronDown className="absolute right-3 top-2.5 text-slate-500 pointer-events-none" />
+            </div>
+
+            {/* BOTÓN LIMPIAR FILTROS */}
+            {hasActiveFilters && (
+              <button 
+                onClick={clearFilters}
+                className="flex items-center justify-center gap-1.5 px-3 py-2 bg-red-50 text-red-600 hover:bg-red-100 border border-red-100 rounded-lg text-sm font-semibold transition-colors shrink-0"
+                title="Borrar filtros"
+              >
+                <FiX size={16} /> Limpiar
+              </button>
+            )}
+            
+            {/* Botones de Acción */}
             <button 
               onClick={openUploadModal}
               className="flex items-center justify-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 px-4 py-2 rounded-lg font-medium transition-all text-sm w-full sm:w-auto shrink-0"
@@ -248,7 +285,7 @@ const CampanasView = () => {
                   <td colSpan="2" className="text-center p-8 text-slate-400">
                     {campanas.length === 0 
                       ? 'No hay campañas en la base de datos.' 
-                      : 'No se encontraron campañas con ese nombre.'}
+                      : 'No se encontraron campañas con ese filtro.'}
                   </td>
                 </tr>
               ) : campanasFiltradas.map((camp) => (
@@ -278,6 +315,7 @@ const CampanasView = () => {
         </div>
       </div>
 
+      {/* MODAL CREAR / EDITAR */}
       {isCreateModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
           <div className="bg-white rounded-2xl shadow-xl border border-slate-100 w-full max-w-md overflow-hidden animate-slideUp">
@@ -322,6 +360,7 @@ const CampanasView = () => {
         </div>
       )}
 
+      {/* MODAL CARGA MASIVA */}
       {isUploadModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
           <div className="bg-white rounded-2xl shadow-xl border border-slate-100 w-full max-w-md overflow-hidden animate-slideUp">
@@ -372,6 +411,7 @@ const CampanasView = () => {
         </div>
       )}
 
+      {/* MODAL ELIMINAR */}
       {isDeleteModalOpen && campanaToDelete && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
           <div className="bg-white rounded-2xl shadow-xl border border-slate-100 w-full max-w-sm overflow-hidden animate-slideUp">

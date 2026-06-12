@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { 
   FiSearch, FiPlus, FiX, FiUploadCloud, FiFileText, 
-  FiEdit2, FiTrash2, FiTag, FiDownload, FiAlertTriangle
+  FiEdit2, FiTrash2, FiTag, FiDownload, FiAlertTriangle, FiChevronDown
 } from 'react-icons/fi';
 import api from '../api';
 
@@ -13,14 +13,15 @@ const EstadosView = () => {
   const [errorMessage, setErrorMessage] = useState(null);
 
   const [estados, setEstados] = useState([]);
-  const [formData, setFormData] = useState({ nombre: '' });
+  const [formData, setFormData] = useState({ nombre: '', color: '#f59e0b' });
   const [selectedFile, setSelectedFile] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [estadoToDelete, setEstadoToDelete] = useState(null); 
   const [isLoading, setIsLoading] = useState(false);
 
-  // Estado para el filtro de búsqueda
+  // Estados para el filtro de búsqueda y ordenamiento
   const [searchTerm, setSearchTerm] = useState('');
+  const [sortOrder, setSortOrder] = useState('newest'); // NUEVO: Estado de ordenamiento
 
   useEffect(() => {
     fetchEstados();
@@ -33,28 +34,38 @@ const EstadosView = () => {
     } catch (error) { console.error("Error:", error); }
   };
 
-  // 1. Buscador inteligente que ignora tildes y mayúsculas al buscar
+  // 1. Buscador inteligente
   const estadosFiltrados = estados.filter(est => {
     const nombreNormalizado = est.nombre.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
     const busquedaNormalizada = searchTerm.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
     return nombreNormalizado.includes(busquedaNormalizada);
   });
 
+  // 2. NUEVO: Lógica de Ordenamiento
+  const estadosOrdenados = [...estadosFiltrados].sort((a, b) => {
+    if (sortOrder === 'az') return a.nombre.localeCompare(b.nombre);
+    if (sortOrder === 'za') return b.nombre.localeCompare(a.nombre);
+    if (sortOrder === 'newest') return b.id - a.id;
+    if (sortOrder === 'oldest') return a.id - b.id;
+    return 0;
+  });
+
   const clearFilters = () => {
     setSearchTerm('');
+    setSortOrder('newest');
   };
 
   const openCreateModal = () => {
     setEditingId(null);
-    setFormData({ nombre: '' });
-    setErrorMessage(null); // Limpiar errores al abrir
+    setFormData({ nombre: '', color: '#f59e0b' });
+    setErrorMessage(null); 
     setIsCreateModalOpen(true);
   };
 
   const openEditModal = (estado) => {
     setEditingId(estado.id);
-    setFormData({ nombre: estado.nombre });
-    setErrorMessage(null); // Limpiar errores al abrir
+    setFormData({ nombre: estado.nombre, color: estado.color || '#f59e0b' });
+    setErrorMessage(null); 
     setIsCreateModalOpen(true);
   };
 
@@ -68,7 +79,7 @@ const EstadosView = () => {
     setIsDeleteModalOpen(true);
   };
 
-  // 2. Validación robusta en tiempo real para evitar duplicados respetando el idioma español
+  // Validación robusta en tiempo real para evitar duplicados
   const handleNameChange = (e) => {
     const value = e.target.value;
     setFormData({ ...formData, nombre: value }); 
@@ -78,7 +89,6 @@ const EstadosView = () => {
       return;
     }
 
-    // localeCompare con 'base' ignora mayúsculas/minúsculas pero entiende la diferencia entre 'n' y 'ñ'
     const isDuplicate = estados.some(
       est => est.nombre.trim().localeCompare(value.trim(), 'es', { sensitivity: 'base' }) === 0 && est.id !== editingId
     );
@@ -98,9 +108,9 @@ const EstadosView = () => {
 
     try {
       if (editingId) {
-        await api.put(`/estados/${editingId}`, { nombre: formData.nombre });
+        await api.put(`/estados/${editingId}`, formData);
       } else {
-        await api.post('/estados', { nombre: formData.nombre });
+        await api.post('/estados', formData);
       }
       await fetchEstados();
       setIsCreateModalOpen(false);
@@ -155,7 +165,6 @@ const EstadosView = () => {
       setIsLoading(false);
     };
 
-    // 3. Leemos el CSV en ISO-8859-1 para soportar archivos de Excel con tildes y eñes
     reader.readAsText(selectedFile, 'ISO-8859-1');
   };
 
@@ -190,35 +199,51 @@ const EstadosView = () => {
     <div className="animate-fadeIn w-full">
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden w-full">
         
-        <div className="p-5 border-b border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white w-full">
+        <div className="p-5 border-b border-slate-200 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-white w-full">
           <div>
             <h3 className="text-lg font-bold text-slate-900 m-0">Gestión de Estados</h3>
             <p className="text-xs text-slate-500 mt-1">Configura las etapas del embudo de ventas</p>
           </div>
           
-          <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-            <div className="relative flex items-center w-full sm:w-64 gap-2">
-              <div className="relative w-full">
-                <FiSearch className="absolute left-3 top-2.5 text-slate-400 text-lg" />
-                <input 
-                  type="text" 
-                  placeholder="Buscar estado..." 
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 box-border"
-                />
-                {searchTerm && (
-                  <button 
-                    onClick={clearFilters}
-                    className="absolute right-2 top-2.5 text-slate-400 hover:text-red-500 transition-colors"
-                    title="Limpiar búsqueda"
-                  >
-                    <FiX />
-                  </button>
-                )}
-              </div>
+          <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto">
+            {/* BUSCADOR */}
+            <div className="relative w-full sm:w-64">
+              <FiSearch className="absolute left-3 top-2.5 text-slate-400 text-lg" />
+              <input 
+                type="text" 
+                placeholder="Buscar estado..." 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 box-border"
+              />
             </div>
             
+            {/* NUEVO: SELECTOR DE ORDENAMIENTO */}
+            <div className="relative w-full sm:w-44">
+              <select 
+                value={sortOrder}
+                onChange={(e) => setSortOrder(e.target.value)}
+                className="w-full pl-3 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 appearance-none box-border text-slate-600 font-medium"
+              >
+                <option value="newest">Más recientes</option>
+                <option value="oldest">Más antiguos</option>
+                <option value="az">Nombre (A - Z)</option>
+                <option value="za">Nombre (Z - A)</option>
+              </select>
+              <FiChevronDown className="absolute right-3 top-2.5 text-slate-500 pointer-events-none" />
+            </div>
+
+            {/* BOTÓN LIMPIAR FILTROS */}
+            {(searchTerm !== '' || sortOrder !== 'newest') && (
+              <button 
+                onClick={clearFilters}
+                className="flex items-center justify-center gap-1.5 px-3 py-2 bg-red-50 text-red-600 hover:bg-red-100 border border-red-100 rounded-lg text-sm font-semibold transition-colors shrink-0"
+                title="Borrar filtros"
+              >
+                <FiX size={16} /> Limpiar
+              </button>
+            )}
+
             <button 
               onClick={openUploadModal}
               className="flex items-center justify-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 px-4 py-2 rounded-lg font-medium transition-all text-sm w-full sm:w-auto shrink-0"
@@ -244,19 +269,26 @@ const EstadosView = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
-              {estadosFiltrados.length === 0 ? (
+              {estadosOrdenados.length === 0 ? (
                 <tr>
                   <td colSpan="2" className="text-center p-8 text-slate-400">
                     {estados.length === 0 
                       ? 'No hay estados en la base de datos.' 
-                      : 'No se encontraron estados con ese nombre.'}
+                      : 'No se encontraron estados con esos filtros.'}
                   </td>
                 </tr>
-              ) : estadosFiltrados.map((estado) => (
+              ) : estadosOrdenados.map((estado) => (
                 <tr key={estado.id} className="hover:bg-slate-50/80 transition-colors group">
                   <td className="p-4 pl-6">
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg bg-amber-100 text-amber-600 shrink-0">
+                      <div 
+                        className="w-9 h-9 rounded-xl flex items-center justify-center text-lg shrink-0 shadow-sm"
+                        style={{ 
+                          backgroundColor: `${estado.color || '#f59e0b'}26`, 
+                          border: `1px solid ${estado.color || '#f59e0b'}40`, 
+                          color: estado.color || '#f59e0b' 
+                        }}
+                      >
                         <FiTag />
                       </div>
                       <span className="font-semibold text-slate-900">{estado.nombre}</span>
@@ -279,6 +311,7 @@ const EstadosView = () => {
         </div>
       </div>
 
+      {/* MODAL CREAR / EDITAR */}
       {isCreateModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
           <div className="bg-white rounded-2xl shadow-xl border border-slate-100 w-full max-w-md overflow-hidden animate-slideUp">
@@ -292,20 +325,31 @@ const EstadosView = () => {
             </div>
             
             <form onSubmit={handleSaveManual} className="p-6 flex flex-col gap-4">
-
               {errorMessage && (
                 <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-3 rounded text-sm font-medium animate-fadeIn">
                   {errorMessage}
                 </div>
               )}
 
-              <div>
-                <label className="block mb-1.5 text-xs font-bold text-slate-500 uppercase">Nombre del Estado</label>
-                <input 
-                  type="text" placeholder="Ej. En Seguimiento" required 
-                  value={formData.nombre} onChange={handleNameChange}
-                  className="w-full p-3 rounded-xl border border-slate-300 bg-slate-50 focus:bg-white focus:border-amber-500 outline-none text-sm box-border" 
-                />
+              <div className="flex gap-4">
+                <div className="flex-1">
+                  <label className="block mb-1.5 text-xs font-bold text-slate-500 uppercase">Nombre del Estado</label>
+                  <input 
+                    type="text" placeholder="Ej. En Seguimiento" required 
+                    value={formData.nombre} onChange={handleNameChange}
+                    className="w-full p-3 rounded-xl border border-slate-300 bg-slate-50 focus:bg-white focus:border-amber-500 outline-none text-sm box-border" 
+                  />
+                </div>
+                
+                <div className="w-20 shrink-0">
+                  <label className="block mb-1.5 text-xs font-bold text-slate-500 uppercase">Color</label>
+                  <input 
+                    type="color" 
+                    value={formData.color} 
+                    onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+                    className="w-full h-[46px] p-1 rounded-xl border border-slate-300 bg-slate-50 cursor-pointer" 
+                  />
+                </div>
               </div>
               
               <div className="flex gap-3 mt-2 pt-4 border-t border-slate-100">
@@ -323,6 +367,7 @@ const EstadosView = () => {
         </div>
       )}
 
+      {/* MODAL CARGA MASIVA */}
       {isUploadModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
           <div className="bg-white rounded-2xl shadow-xl border border-slate-100 w-full max-w-md overflow-hidden animate-slideUp">
@@ -373,6 +418,7 @@ const EstadosView = () => {
         </div>
       )}
 
+      {/* MODAL ELIMINAR */}
       {isDeleteModalOpen && estadoToDelete && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
           <div className="bg-white rounded-2xl shadow-xl border border-slate-100 w-full max-w-sm overflow-hidden animate-slideUp">

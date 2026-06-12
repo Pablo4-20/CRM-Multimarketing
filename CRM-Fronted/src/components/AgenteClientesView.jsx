@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { 
   FiSearch, FiX, FiUser, FiMail, FiPhone, FiVolume2, 
   FiTag, FiSend, FiMessageSquare, FiChevronLeft, FiChevronRight,
-  FiCalendar, FiClock, FiCheckCircle, FiBell, FiStar
+  FiCalendar, FiClock, FiCheckCircle, FiBell, FiStar, FiChevronDown
 } from 'react-icons/fi';
 import api from '../api';
 
@@ -10,18 +10,16 @@ import api from '../api';
 const verificarCitaPendiente = (texto) => {
   if (!texto) return false;
   try {
-    // 1. Intentar formato numérico (ej: 10/6/2026, 15:30)
     const matchNumerico = texto.match(/para el (\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4}),?\s+(\d{1,2}):(\d{2})/);
     if (matchNumerico) {
       const dia = parseInt(matchNumerico[1]);
-      const mes = parseInt(matchNumerico[2]) - 1; // Meses en JS son 0-11
+      const mes = parseInt(matchNumerico[2]) - 1; 
       const anio = parseInt(matchNumerico[3]);
       const hora = parseInt(matchNumerico[4]);
       const min = parseInt(matchNumerico[5]);
       return new Date(anio, mes, dia, hora, min) > new Date();
     }
 
-    // 2. Intentar formato de texto (ej: 10 jun 2026, 15:30)
     const matchTexto = texto.match(/para el (\d{1,2})\s+(?:de\s+)?([a-zA-Z]{3})[a-zA-Z\.]*\s+(?:de\s+)?(\d{4}),?\s+(\d{1,2}):(\d{2})/i);
     if (matchTexto) {
       const meses = {"ene":0,"feb":1,"mar":2,"abr":3,"may":4,"jun":5,"jul":6,"ago":7,"sep":8,"oct":9,"nov":10,"dic":11};
@@ -36,7 +34,7 @@ const verificarCitaPendiente = (texto) => {
     console.error("Error parseando fecha:", e);
   }
   
-  return false; // Si ya pasó o no se pudo leer, se marca como completada por defecto
+  return false;
 };
 
 const AgenteClientesView = ({ user }) => {
@@ -68,10 +66,11 @@ const AgenteClientesView = ({ user }) => {
 
   const comentariosEndRef = useRef(null);
 
-  // ESTADOS PARA FILTROS Y PAGINACIÓN
+  // ESTADOS PARA FILTROS, ORDEN Y PAGINACIÓN
   const [searchTerm, setSearchTerm] = useState('');
   const [filtroCampana, setFiltroCampana] = useState('');
   const [filtroEstado, setFiltroEstado] = useState('');
+  const [sortOrder, setSortOrder] = useState('newest'); // NUEVO: Estado de ordenamiento
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(50); 
 
@@ -85,7 +84,7 @@ const AgenteClientesView = ({ user }) => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, filtroCampana, filtroEstado, itemsPerPage]);
+  }, [searchTerm, filtroCampana, filtroEstado, sortOrder, itemsPerPage]);
 
   useEffect(() => {
     if (comentariosEndRef.current) {
@@ -101,7 +100,7 @@ const AgenteClientesView = ({ user }) => {
     }
   }, [isAgendarModalOpen]);
 
-  // Sincronizar citas existentes en la base de datos (hidratación inicial)
+  // Sincronizar citas
   useEffect(() => {
     if (clientes.length > 0) {
       const citasDetectadas = [];
@@ -109,7 +108,7 @@ const AgenteClientesView = ({ user }) => {
         if (cliente.comentarios) {
           cliente.comentarios.forEach(comentario => {
             if (comentario.texto && comentario.texto.includes('📅 Cita agendada')) {
-              // Aquí a futuro se puede extraer la fecha exacta si se añade el campo a la BD.
+              // Preparado para futuro
             }
           });
         }
@@ -117,7 +116,7 @@ const AgenteClientesView = ({ user }) => {
     }
   }, [clientes]);
 
-  // Revisor de citas en segundo plano (Alerta persistente + Sonido)
+  // Revisor de citas
   useEffect(() => {
     const interval = setInterval(() => {
       const ahora = new Date().getTime();
@@ -151,7 +150,7 @@ const AgenteClientesView = ({ user }) => {
         });
         return hayCambios ? citasActualizadas : prevCitas;
       });
-    }, 20000); // Revisa cada 20 segundos
+    }, 20000); 
 
     return () => clearInterval(interval);
   }, []);
@@ -298,6 +297,7 @@ const AgenteClientesView = ({ user }) => {
   const historialCitas = comentarios.filter(c => c.texto?.includes('📅 Cita agendada'));
   const datosPestañaActual = activeTab === 'gestion' ? comentariosNormales : historialCitas;
 
+  // Lógica de Filtrado
   const clientesFiltrados = clientes.filter(cliente => {
     const searchLower = searchTerm.toLowerCase();
     const matchTexto = 
@@ -315,17 +315,28 @@ const AgenteClientesView = ({ user }) => {
     return matchTexto && matchCampana && matchEstado;
   });
 
+  // NUEVO: Lógica de Ordenamiento
+  const clientesOrdenados = [...clientesFiltrados].sort((a, b) => {
+    if (sortOrder === 'az') return a.nombre.localeCompare(b.nombre);
+    if (sortOrder === 'za') return b.nombre.localeCompare(a.nombre);
+    if (sortOrder === 'newest') return b.id - a.id;
+    if (sortOrder === 'oldest') return a.id - b.id;
+    return 0;
+  });
+
   const limpiarFiltros = () => {
     setSearchTerm('');
     setFiltroCampana('');
     setFiltroEstado('');
+    setSortOrder('newest'); // Reinicia el orden
   };
 
+  // Lógica de Paginación aplicando el arreglo ordenado
   const isAll = itemsPerPage === 'all';
-  const indexOfLastItem = isAll ? clientesFiltrados.length : currentPage * itemsPerPage;
+  const indexOfLastItem = isAll ? clientesOrdenados.length : currentPage * itemsPerPage;
   const indexOfFirstItem = isAll ? 0 : indexOfLastItem - itemsPerPage;
-  const currentItems = clientesFiltrados.slice(indexOfFirstItem, indexOfLastItem);
-  const totalPages = isAll ? 1 : Math.ceil(clientesFiltrados.length / itemsPerPage);
+  const currentItems = clientesOrdenados.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = isAll ? 1 : Math.ceil(clientesOrdenados.length / itemsPerPage);
 
   return (
     <div className="animate-fadeIn w-full flex flex-col h-full relative">
@@ -400,7 +411,22 @@ const AgenteClientesView = ({ user }) => {
               ))}
             </select>
 
-            {(searchTerm !== '' || filtroCampana !== '' || filtroEstado !== '') && (
+            {/* NUEVO: SELECTOR DE ORDENAMIENTO */}
+            <div className="relative w-full sm:w-44">
+              <select 
+                value={sortOrder}
+                onChange={(e) => setSortOrder(e.target.value)}
+                className="w-full pl-3 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 appearance-none box-border text-slate-600 font-medium"
+              >
+                <option value="newest">Más recientes</option>
+                <option value="oldest">Más antiguos</option>
+                <option value="az">Nombre (A - Z)</option>
+                <option value="za">Nombre (Z - A)</option>
+              </select>
+              <FiChevronDown className="absolute right-3 top-2.5 text-slate-500 pointer-events-none" />
+            </div>
+
+            {(searchTerm !== '' || filtroCampana !== '' || filtroEstado !== '' || sortOrder !== 'newest') && (
               <button 
                 onClick={limpiarFiltros}
                 className="flex items-center justify-center gap-1.5 px-3 py-2 bg-red-50 text-red-600 hover:bg-red-100 border border-red-100 rounded-lg text-sm font-semibold transition-colors shrink-0"
@@ -416,7 +442,7 @@ const AgenteClientesView = ({ user }) => {
         <div className="p-3 px-5 border-b border-slate-200 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-4 shrink-0">
           <div className="flex flex-col sm:flex-row items-center gap-4 text-sm text-slate-500">
             <div>
-              Mostrando <span className="font-semibold text-slate-700">{clientesFiltrados.length === 0 ? 0 : indexOfFirstItem + 1}</span> a <span className="font-semibold text-slate-700">{Math.min(indexOfLastItem, clientesFiltrados.length)}</span> de <span className="font-semibold text-slate-700">{clientesFiltrados.length}</span> clientes
+              Mostrando <span className="font-semibold text-slate-700">{clientesOrdenados.length === 0 ? 0 : indexOfFirstItem + 1}</span> a <span className="font-semibold text-slate-700">{Math.min(indexOfLastItem, clientesOrdenados.length)}</span> de <span className="font-semibold text-slate-700">{clientesOrdenados.length}</span> clientes
             </div>
             
             <div className="flex items-center gap-2 border-l border-slate-300 pl-4">
@@ -459,21 +485,27 @@ const AgenteClientesView = ({ user }) => {
 
         {/* TABLA DE DATOS */}
         <div className="w-full overflow-x-auto flex-1">
-          <table className="w-full text-left border-collapse min-w-[700px]">
+          <table className="w-full text-left border-collapse min-w-[900px]">
             <thead>
               <tr className="bg-slate-50 text-slate-500 font-bold text-[11px] uppercase tracking-wider border-b border-slate-200">
-                <th className="p-4 pl-6">Cliente</th>
+                <th className="p-4 pl-6 w-20">ID</th>
+                <th className="p-4">Cliente</th>
+                <th className="p-4">Correo</th>
+                <th className="p-4">Teléfono</th>
                 <th className="p-4">Campaña</th>
-                <th className="p-4">Estado Actual</th>
+                <th className="p-4">Estado</th>
                 <th className="p-4 text-center w-32">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
               {currentItems.length === 0 ? (
-                <tr><td colSpan="4" className="text-center p-8 text-slate-400">No se encontraron clientes con esos filtros.</td></tr>
+                <tr><td colSpan="7" className="text-center p-8 text-slate-400">No se encontraron clientes con esos filtros.</td></tr>
               ) : currentItems.map((cliente) => (
                 <tr key={cliente.id} className="hover:bg-slate-50/80 transition-colors group">
-                  <td className="p-4 pl-6">
+                  <td className="p-4 pl-6 font-mono text-xs font-bold text-slate-400">
+                    #{cliente.id}
+                  </td>
+                  <td className="p-4">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-full flex items-center justify-center text-lg bg-teal-100 text-teal-600 shrink-0 font-bold">
                         {cliente.nombre.charAt(0).toUpperCase()}
@@ -489,19 +521,44 @@ const AgenteClientesView = ({ user }) => {
                     </div>
                   </td>
                   <td className="p-4">
+                    {cliente.email ? (
+                      <div className="flex items-center gap-2 text-slate-600">
+                        <FiMail className="text-slate-400 shrink-0" /> <span className="truncate">{cliente.email}</span>
+                      </div>
+                    ) : <span className="italic text-slate-400 text-xs">-</span>}
+                  </td>
+                  <td className="p-4">
+                    {cliente.telefono ? (
+                      <div className="flex items-center gap-2 text-slate-600">
+                        <FiPhone className="text-slate-400 shrink-0" /> {cliente.telefono}
+                      </div>
+                    ) : <span className="italic text-slate-400 text-xs">-</span>}
+                  </td>
+                  <td className="p-4">
                     {cliente.campana ? (
-                      <span className="flex items-center gap-1.5 text-blue-700 bg-blue-50 px-2 py-1 rounded text-xs font-medium w-fit"><FiVolume2/> {cliente.campana.nombre}</span>
+                      <span className="flex items-center gap-1.5 text-blue-700 bg-blue-50 border border-blue-100 px-2 py-1 rounded text-xs font-medium w-fit"><FiVolume2/> {cliente.campana.nombre}</span>
                     ) : <span className="italic text-slate-400 text-xs">-</span>}
                   </td>
                   <td className="p-4">
                     {cliente.estado ? (
-                      <span className="flex items-center gap-1.5 text-amber-700 bg-amber-50 px-2 py-1 rounded text-xs font-medium w-fit"><FiTag/> {cliente.estado.nombre}</span>
-                    ) : <span className="italic text-slate-400 text-xs">-</span>}
+                      <span 
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-semibold w-fit text-slate-700"
+                        style={{ 
+                          backgroundColor: `${cliente.estado.color || '#f59e0b'}26`, 
+                          border: `1px solid ${cliente.estado.color || '#f59e0b'}40` 
+                        }}
+                      >
+                        <FiTag style={{ color: cliente.estado.color || '#f59e0b' }} /> 
+                        {cliente.estado.nombre}
+                      </span>
+                    ) : (
+                      <span className="italic text-slate-400 text-xs">-</span>
+                    )}
                   </td>
                   <td className="p-4 text-center">
                     <button 
                       onClick={() => openDetalleModal(cliente)} 
-                      className="px-3 py-1.5 text-teal-700 bg-teal-50 border border-teal-100 hover:bg-teal-100 rounded-lg transition-colors text-xs font-bold"
+                      className="px-3 py-1.5 text-teal-700 bg-teal-50 border border-teal-100 hover:bg-teal-100 rounded-lg transition-colors text-xs font-bold whitespace-nowrap"
                     >
                       Ver Detalle
                     </button>
@@ -552,9 +609,22 @@ const AgenteClientesView = ({ user }) => {
                     <h4 className="text-[10px] font-bold text-blue-400 uppercase tracking-wider mb-1 flex items-center gap-1"><FiVolume2/> Campaña</h4>
                     <p className="text-blue-800 font-semibold text-sm">{selectedCliente.campana?.nombre || 'Ninguna'}</p>
                   </div>
-                  <div className="bg-amber-50 p-3 rounded-xl border border-amber-100">
-                    <h4 className="text-[10px] font-bold text-amber-500 uppercase tracking-wider mb-1 flex items-center gap-1"><FiTag/> Estado Actual</h4>
-                    <p className="text-amber-800 font-semibold text-sm">{selectedCliente.estado?.nombre || 'Sin estado'}</p>
+                  <div 
+                    className="p-3 rounded-xl border"
+                    style={{ 
+                      backgroundColor: `${selectedCliente.estado?.color || '#f59e0b'}26`,
+                      borderColor: `${selectedCliente.estado?.color || '#f59e0b'}40`
+                    }}
+                  >
+                    <h4 
+                      className="text-[10px] font-bold uppercase tracking-wider mb-1 flex items-center gap-1"
+                      style={{ color: selectedCliente.estado?.color || '#f59e0b' }} 
+                    >
+                      <FiTag/> Estado Actual
+                    </h4>
+                    <p className="font-semibold text-sm text-slate-800">
+                      {selectedCliente.estado?.nombre || 'Sin estado'}
+                    </p>
                   </div>
                 </div>
 
@@ -620,7 +690,6 @@ const AgenteClientesView = ({ user }) => {
                               <div>
                                 <h4 className="text-base font-bold text-slate-900">{agentName}</h4>
                                 
-                                {/* AQUI SE AGREGA LA ESTRELLA / VISTO DE FORMA DINAMICA */}
                                 <span className={`mt-1.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider ${getStatusBadge(comentario.estado)}`}>
                                   {isCita && (
                                     esPendiente 
@@ -667,7 +736,7 @@ const AgenteClientesView = ({ user }) => {
                             value={nuevoComentario}
                             onChange={(e) => setNuevoComentario(e.target.value)}
                             placeholder="Escribe una nueva gestión o nota de seguimiento..."
-                            className="w-full pl-4 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white resize-none max-h-32 min-h-[50px]"
+                            className="w-full pl-4 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:teal-500 focus:bg-white resize-none max-h-32 min-h-[50px]"
                             rows="2"
                             onKeyDown={(e) => {
                               if (e.key === 'Enter' && !e.shiftKey) {

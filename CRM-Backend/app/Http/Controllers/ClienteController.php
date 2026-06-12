@@ -13,6 +13,22 @@ class ClienteController extends Controller
         return response()->json(Cliente::with(['user', 'campana', 'estado'])->orderBy('id', 'desc')->get());
     }
 
+    // =========================================================
+    // NUEVO MÉTODO SHOW PARA CARGAR LA FICHA DEL CLIENTE
+    // =========================================================
+    public function show($id) {
+        $cliente = Cliente::with([
+            'user', 
+            'campana', 
+            'estado', 
+            'comentarios' => function($query) {
+                $query->orderBy('created_at', 'desc')->with('user');
+            }
+        ])->findOrFail($id);
+        
+        return response()->json($cliente);
+    }
+
     public function storeMasivo(Request $request) {
         $request->validate([
             'clientes' => 'required|array',
@@ -27,11 +43,47 @@ class ClienteController extends Controller
         ]);
 
         $creados = 0;
-        $actualizados = 0;
+        $omitidos = 0;
+        $listaOmitidos = []; 
         $nuevosClientes = [];
 
         foreach ($request->clientes as $cliData) {
-            // Lógica para Campaña
+            $clienteExistente = null;
+            $motivoOmitido = '';
+
+            // 1. Buscar duplicado por Email
+            if (!empty($cliData['email'])) {
+                $clienteExistente = Cliente::where('email', trim($cliData['email']))->first();
+                if ($clienteExistente) {
+                    $motivoOmitido = 'el correo electrónico ya existe';
+                }
+            }
+
+            // 2. Buscar duplicado por Teléfono (si no se encontró por email)
+            if (!$clienteExistente && !empty($cliData['telefono'])) {
+                $clienteExistente = Cliente::where('telefono', trim($cliData['telefono']))->first();
+                if ($clienteExistente) {
+                    $motivoOmitido = 'el número de teléfono ya está registrado';
+                }
+            }
+
+            // 3. Buscar duplicado por Nombre (si no hay email ni teléfono duplicados)
+            if (!$clienteExistente) {
+                $clienteExistente = Cliente::where('nombre', trim($cliData['nombre']))->first();
+                if ($clienteExistente) {
+                    $motivoOmitido = 'ya existe un cliente con ese mismo nombre';
+                }
+            }
+
+            // SI EL CLIENTE YA EXISTE, REGISTRAMOS EL MOTIVO Y LO SALTAMOS
+            if ($clienteExistente) {
+                $omitidos++;
+                $nombreCliente = trim($cliData['nombre']);
+                $listaOmitidos[] = "{$nombreCliente} se omitió porque {$motivoOmitido}.";
+                continue; 
+            }
+
+            // SI EL CLIENTE NO EXISTE, LO CREAMOS
             $campana_id = null;
             if (!empty($cliData['campana_id'])) {
                 $campana_id = $cliData['campana_id'];
@@ -40,71 +92,62 @@ class ClienteController extends Controller
                 $campana_id = $campana->id;
             }
 
-            // Lógica para Estado
             $estado_id = null;
             if (!empty($cliData['estado_id'])) {
                 $estado_id = $cliData['estado_id'];
             } elseif (!empty($cliData['estado'])) {
-                $estadoObj = Estado::firstOrCreate(['nombre' => trim($cliData['estado'])]);
+                $estadoObj = Estado::firstOrCreate(
+                    ['nombre' => trim($cliData['estado'])],
+                    ['color' => '#f59e0b']
+                );
                 $estado_id = $estadoObj->id;
             }
 
             $user_id = $cliData['user_id'] ?? null;
-            $cliente = null;
 
-            // 1. Buscar duplicado por Email
-            if (!empty($cliData['email'])) {
-                $cliente = Cliente::where('email', trim($cliData['email']))->first();
-            }
-            // 2. Buscar duplicado por Teléfono (si no se encontró por email)
-            if (!$cliente && !empty($cliData['telefono'])) {
-                $cliente = Cliente::where('telefono', trim($cliData['telefono']))->first();
-            }
-            // 3. Buscar duplicado por Nombre exacto (si no hay email ni teléfono)
-            if (!$cliente) {
-                $cliente = Cliente::where('nombre', trim($cliData['nombre']))->first();
-            }
-
-            // LÓGICA ANTI-DUPLICADOS
-            if ($cliente) {
-                // El cliente YA EXISTE -> Lo actualizamos para no duplicar
-                $cliente->update([
-                    'nombre' => trim($cliData['nombre']),
-                    'email' => empty($cliData['email']) ? $cliente->email : trim($cliData['email']),
-                    'telefono' => empty($cliData['telefono']) ? $cliente->telefono : trim($cliData['telefono']),
-                    'campana_id' => $campana_id ?? $cliente->campana_id,
-                    'estado_id' => $estado_id ?? $cliente->estado_id,
-                    'user_id' => $user_id ?? $cliente->user_id
-                ]);
-                $actualizados++;
-                $nuevosClientes[] = $cliente;
-            } else {
-                // El cliente NO EXISTE -> Lo creamos nuevo
-                $nuevo = Cliente::create([
-                    'nombre' => trim($cliData['nombre']),
-                    'email' => empty($cliData['email']) ? null : trim($cliData['email']),
-                    'telefono' => empty($cliData['telefono']) ? null : trim($cliData['telefono']),
-                    'campana_id' => $campana_id,
-                    'estado_id' => $estado_id,
-                    'user_id' => $user_id
-                ]);
-                $creados++;
-                $nuevosClientes[] = $nuevo;
-            }
+            $nuevo = Cliente::create([
+                'nombre' => trim($cliData['nombre']),
+                'email' => empty($cliData['email']) ? null : trim($cliData['email']),
+                'telefono' => empty($cliData['telefono']) ? null : trim($cliData['telefono']),
+                'campana_id' => $campana_id,
+                'estado_id' => $estado_id,
+                'user_id' => $user_id
+            ]);
+            
+            $creados++;
+            $nuevosClientes[] = $nuevo;
         }
 
-        // Devolvemos un mensaje detallado
         return response()->json([
-            'message' => "Importación exitosa: $creados clientes nuevos creados y $actualizados clientes actualizados.", 
+            'message' => "Procesamiento completado.",
+            'creados' => $creados,
+            'omitidos_conteo' => $omitidos,
+            'omitidos' => $listaOmitidos, 
             'data' => $nuevosClientes
         ], 201);
     }
 
     public function update(Request $request, $id) {
-        $request->validate(['nombre' => 'required|string|max:255']);
+        $request->validate([
+            'nombre' => 'required|string|max:255'
+        ]);
+
         $cliente = Cliente::findOrFail($id);
-        $cliente->update($request->only(['nombre', 'email', 'telefono', 'campana_id']));
-        return response()->json($cliente);
+        
+        // Preparamos los datos base a actualizar
+        $dataToUpdate = $request->only(['nombre', 'email', 'telefono', 'campana_id', 'user_id', 'estado_id', 'notas']);
+        
+        // Mapeamos 'correo' del frontend a 'email' de la base de datos si viene en el request
+        if ($request->has('correo')) {
+            $dataToUpdate['email'] = $request->correo;
+        }
+
+        $cliente->update($dataToUpdate);
+        
+        return response()->json([
+            'message' => 'Datos actualizados correctamente',
+            'cliente' => $cliente
+        ]);
     }
 
     public function destroy($id) {
@@ -160,5 +203,30 @@ class ClienteController extends Controller
         $cliente->update(['notas' => $request->notas]);
 
         return response()->json(['message' => 'Notas guardadas correctamente', 'cliente' => $cliente]);
+    }
+    
+    public function updateComentario(Request $request, $id) {
+        $request->validate([
+            'texto' => 'required|string'
+        ]);
+
+        $comentario = Comentario::findOrFail($id);
+        $comentario->update([
+            'texto' => $request->texto
+        ]);
+
+        return response()->json([
+            'message' => 'Gestión actualizada correctamente',
+            'comentario' => $comentario->load('cliente')
+        ]);
+    }
+
+    public function destroyComentario($id) {
+        $comentario = Comentario::findOrFail($id);
+        $comentario->delete();
+
+        return response()->json([
+            'message' => 'Gestión eliminada correctamente'
+        ]);
     }
 }

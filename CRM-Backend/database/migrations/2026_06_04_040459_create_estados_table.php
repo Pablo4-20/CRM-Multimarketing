@@ -8,6 +8,7 @@ return new class extends Migration {
         Schema::create('estados', function (Blueprint $table) {
             $table->id();
             $table->string('nombre');
+            $table->string('color', 10)->default('#f59e0b');
             $table->timestamps();
         });
     }

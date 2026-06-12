@@ -3,29 +3,37 @@ import {
   FiShield, FiUser, FiMail, FiSearch, 
   FiFilter, FiPlus, FiX, FiChevronDown, FiLock,
   FiEdit2, FiTrash2, FiAlertTriangle, FiCheckCircle,
-  FiEye, FiEyeOff // NUEVO: Importación de iconos de visibilidad
+  FiEye, FiEyeOff, FiUploadCloud, FiDownload, FiFileText
 } from 'react-icons/fi';
+import * as XLSX from 'xlsx';
 import api from '../api';
 
 const UserView = () => {
   const [users, setUsers] = useState([]);
   const [errorMessage, setErrorMessage] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
   
   // Modales
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   
   // Estados para manejar los datos
   const [editingUser, setEditingUser] = useState(null);
   const [userToDelete, setUserToDelete] = useState(null);
   const [transferUserId, setTransferUserId] = useState('');
   
-  // Estados de filtros
+  // Estados para Carga Masiva
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [importError, setImportError] = useState(null);
+
+  // Estados de filtros y ordenamiento
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
+  const [sortOrder, setSortOrder] = useState('newest'); // NUEVO: Estado de ordenamiento
 
-  // NUEVO: Estado para alternar la visibilidad de la contraseña
+  // Estado para alternar la visibilidad de la contraseña
   const [showPassword, setShowPassword] = useState(false);
 
   // Estado del formulario
@@ -54,16 +62,26 @@ const UserView = () => {
     return matchesSearch && matchesRole;
   });
 
+  // NUEVO: Lógica de Ordenamiento
+  const sortedUsers = [...filteredUsers].sort((a, b) => {
+    if (sortOrder === 'az') return a.name.localeCompare(b.name);
+    if (sortOrder === 'za') return b.name.localeCompare(a.name);
+    if (sortOrder === 'newest') return b.id - a.id;
+    if (sortOrder === 'oldest') return a.id - b.id;
+    return 0;
+  });
+
   const clearFilters = () => {
     setSearchTerm('');
     setRoleFilter('');
+    setSortOrder('newest'); // Reinicia el orden
   };
 
   // 2. Manejadores de Modales
   const openCreateModal = () => {
     setEditingUser(null);
     setErrorMessage(null);
-    setShowPassword(false); // NUEVO: Reiniciar la visibilidad al abrir modal
+    setShowPassword(false);
     setFormData({ name: '', email: '', password: '', role: 'agente', status: 'Activo' });
     setIsModalOpen(true);
   };
@@ -71,7 +89,7 @@ const UserView = () => {
   const openEditModal = (user) => {
     setEditingUser(user);
     setErrorMessage(null);
-    setShowPassword(false); // NUEVO: Reiniciar la visibilidad al editar
+    setShowPassword(false);
     setFormData({ 
       name: user.name, 
       email: user.email, 
@@ -88,7 +106,13 @@ const UserView = () => {
     setIsDeleteModalOpen(true);
   };
 
-  // 3. Crear o Editar Usuario
+  const openUploadModal = () => {
+    setSelectedFile(null);
+    setImportError(null);
+    setIsUploadModalOpen(true);
+  };
+
+  // 3. Crear o Editar Usuario Manualmente
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMessage(null);
@@ -103,13 +127,17 @@ const UserView = () => {
     try {
       if (editingUser) {
         await api.put(`/users/${editingUser.id}`, formData);
+        setSuccessMessage("Usuario actualizado exitosamente.");
       } else {
         await api.post('/users', formData);
+        setSuccessMessage("Usuario creado exitosamente.");
       }
 
       fetchUsers(); 
       setIsModalOpen(false);
       setErrorMessage(null);
+      
+      setTimeout(() => setSuccessMessage(null), 3500);
       
     } catch (error) {
       if (error.response && error.response.status === 422) {
@@ -123,7 +151,83 @@ const UserView = () => {
     }
   };
 
-  // 4. Eliminar Usuario y Transferir Datos
+  // 4. Procesar Carga Masiva (Excel)
+  const handleUploadSave = (e) => {
+    e.preventDefault();
+    setImportError(null);
+
+    if (!selectedFile) {
+      setImportError("Debes seleccionar un archivo Excel para continuar.");
+      return; 
+    }
+
+    setIsLoading(true);
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const data = new Uint8Array(event.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+        const usuariosAEnviar = [];
+
+        jsonData.forEach((row) => {
+          const name = row['Usuario'] || row['usuario'] || row['Nombre'] || row['nombre'] || '';
+          const email = row['Contacto'] || row['contacto'] || row['Email'] || row['email'] || '';
+          const password = row['Contraseña'] || row['contraseña'] || row['Password'] || row['password'] || '';
+          const role = row['Rol'] || row['rol'] || 'agente'; 
+          
+          if (name && email && password) {
+            usuariosAEnviar.push({ 
+              name: String(name).trim(), 
+              email: String(email).trim(), 
+              password: String(password).trim(),
+              role: String(role).trim()
+            });
+          }
+        });
+
+        if (usuariosAEnviar.length > 0) {
+          await api.post('/users/masivo', { usuarios: usuariosAEnviar });
+          await fetchUsers(); 
+          setSuccessMessage(`Se importaron los usuarios correctamente.`);
+          setTimeout(() => setSuccessMessage(null), 4000);
+          
+          setIsUploadModalOpen(false);
+          setSelectedFile(null);
+        } else {
+          setImportError("El archivo Excel no contiene registros válidos o faltan columnas requeridas (Usuario, Contacto, Contraseña).");
+        }
+      } catch (error) {
+        console.error("Error leyendo Excel:", error);
+        if (error.response && error.response.data?.errors) {
+          setImportError(Object.values(error.response.data.errors).flat().join(' | '));
+        } else {
+          setImportError("Hubo un error al procesar o conectar con el servidor. Verifica que no haya correos duplicados.");
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    reader.readAsArrayBuffer(selectedFile);
+  };
+
+  const handleDownloadTemplate = () => {
+    const datosEjemplo = [
+      { Usuario: "Alejandro Real", Contacto: "alejandro@ejemplo.com", Contraseña: "Segura123*", Rol: "agente" },
+      { Usuario: "Gabriela Silva", Contacto: "gabriela@ejemplo.com", Contraseña: "Admin987#", Rol: "admin" }
+    ];
+
+    const hoja = XLSX.utils.json_to_sheet(datosEjemplo);
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, hoja, "Usuarios");
+    XLSX.writeFile(libro, "Plantilla_Carga_Usuarios.xlsx");
+  };
+
+  // 5. Eliminar Usuario y Transferir Datos
   const handleDelete = async (e) => {
     e.preventDefault();
     try {
@@ -136,18 +240,16 @@ const UserView = () => {
       setTransferUserId(''); 
 
       if (transferUserId) {
-        setSuccessMessage("Agente eliminado y todo su historial fue transferido exitosamente.");
+        setSuccessMessage("Usuario eliminado y todo su historial fue transferido exitosamente.");
       } else {
-        setSuccessMessage("Agente eliminado exitosamente.");
+        setSuccessMessage("Usuario eliminado exitosamente.");
       }
 
-      setTimeout(() => {
-        setSuccessMessage(null);
-      }, 3500);
+      setTimeout(() => setSuccessMessage(null), 3500);
 
     } catch (error) {
       console.error("Error al eliminar el usuario:", error);
-      setErrorMessage("Hubo un error al intentar eliminar el agente.");
+      setErrorMessage("Hubo un error al intentar eliminar el usuario.");
     }
   };
 
@@ -179,9 +281,9 @@ const UserView = () => {
             <p className="text-xs text-slate-500 mt-1">Gestiona los accesos de tu equipo</p>
           </div>
           
-          <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+          <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto flex-wrap">
             {/* INPUT DE BÚSQUEDA POR NOMBRE */}
-            <div className="relative w-full sm:w-64">
+            <div className="relative w-full sm:w-56">
               <FiSearch className="absolute left-3 top-2.5 text-slate-400 text-lg" />
               <input 
                 type="text" 
@@ -193,7 +295,7 @@ const UserView = () => {
             </div>
             
             {/* SELECTOR DE ROL */}
-            <div className="relative w-full sm:w-48">
+            <div className="relative w-full sm:w-40">
               <FiFilter className="absolute left-3 top-2.5 text-slate-400 text-lg" />
               <select 
                 value={roleFilter}
@@ -208,8 +310,23 @@ const UserView = () => {
               <FiChevronDown className="absolute right-3 top-3 text-slate-500 pointer-events-none" />
             </div>
 
+            {/* NUEVO: SELECTOR DE ORDENAMIENTO (A-Z, Fechas) */}
+            <div className="relative w-full sm:w-44">
+              <select 
+                value={sortOrder}
+                onChange={(e) => setSortOrder(e.target.value)}
+                className="w-full pl-3 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none box-border text-slate-600 font-medium"
+              >
+                <option value="newest">Más recientes</option>
+                <option value="oldest">Más antiguos</option>
+                <option value="az">Nombre (A - Z)</option>
+                <option value="za">Nombre (Z - A)</option>
+              </select>
+              <FiChevronDown className="absolute right-3 top-3 text-slate-500 pointer-events-none" />
+            </div>
+
             {/* BOTÓN LIMPIAR FILTROS */}
-            {(searchTerm || roleFilter) && (
+            {(searchTerm || roleFilter || sortOrder !== 'newest') && (
               <button 
                 onClick={clearFilters}
                 className="flex items-center justify-center gap-2 px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium transition-colors w-full sm:w-auto"
@@ -218,6 +335,13 @@ const UserView = () => {
                 <FiX /> Limpiar
               </button>
             )}
+
+            <button 
+              onClick={openUploadModal}
+              className="flex items-center justify-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 px-4 py-2 rounded-lg font-medium transition-all text-sm w-full sm:w-auto shrink-0"
+            >
+              <FiUploadCloud className="text-lg" /> Carga Masiva
+            </button>
 
             <button onClick={openCreateModal} className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition-all text-sm w-full sm:w-auto shrink-0">
               <FiPlus className="text-lg" /> Nuevo Usuario
@@ -236,18 +360,18 @@ const UserView = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
-              {filteredUsers.length === 0 ? (
+              {sortedUsers.length === 0 ? (
                 <tr>
                   <td colSpan="4" className="text-center p-8 text-slate-400">
                     {users.length === 0 ? 'No hay usuarios o no hay conexión con Laravel.' : 'No se encontraron usuarios con esos filtros.'}
                   </td>
                 </tr>
-              ) : filteredUsers.map((user) => (
+              ) : sortedUsers.map((user) => (
                 <tr key={user.id} className="hover:bg-slate-50/80 transition-colors group">
                   <td className="p-4 pl-6">
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-sm shrink-0">
-                        {user.name.charAt(0)}
+                        {user.name.charAt(0).toUpperCase()}
                       </div>
                       <div className="min-w-0 overflow-hidden">
                         <div className="font-semibold text-slate-900 truncate">{user.name}</div>
@@ -322,7 +446,6 @@ const UserView = () => {
                 </div>
               </div>
 
-              {/* ======================= NUEVO: CAMPO DE CONTRASEÑA ======================= */}
               <div>
                 <label className="block mb-1.5 text-xs font-bold text-slate-500 uppercase tracking-wide">
                   {editingUser ? 'Nueva Contraseña (Opcional)' : 'Contraseña Temporal'}
@@ -335,7 +458,6 @@ const UserView = () => {
                     required={!editingUser} 
                     value={formData.password} 
                     onChange={(e) => setFormData({...formData, password: e.target.value})} 
-                    /* Nota: Aumenté el padding derecho (pr-10) para evitar que el texto quede debajo del icono */
                     className="w-full pl-9 pr-10 py-2.5 rounded-xl border border-slate-300 bg-slate-50 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none text-sm font-medium transition-all box-border" 
                   />
                   <button
@@ -347,7 +469,6 @@ const UserView = () => {
                   </button>
                 </div>
               </div>
-              {/* ========================================================================= */}
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -383,6 +504,64 @@ const UserView = () => {
                 </button>
                 <button type="submit" className="flex-1 p-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm shadow-md shadow-blue-200 transition-colors">
                   {editingUser ? 'Actualizar Cambios' : 'Crear Usuario'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================= MODAL: CARGA MASIVA DE EXCEL ======================= */}
+      {isUploadModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-100 w-full max-w-md overflow-hidden animate-slideUp">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-emerald-50">
+              <h3 className="text-lg font-bold text-emerald-900 m-0 flex items-center gap-2">
+                <FiUploadCloud className="text-emerald-600" /> Importar Usuarios
+              </h3>
+              <button onClick={() => setIsUploadModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1 bg-white border border-slate-200 rounded-md shadow-sm">
+                <FiX size={18} />
+              </button>
+            </div>
+            
+            <form onSubmit={handleUploadSave} className="p-6 flex flex-col gap-4">
+              {importError && (
+                <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-3.5 rounded text-xs font-medium flex gap-2 items-start animate-fadeIn">
+                  <FiAlertTriangle className="text-base shrink-0 mt-0.5" />
+                  <span className="break-words">{importError}</span>
+                </div>
+              )}
+
+              <div className="border-2 border-dashed border-emerald-200 bg-emerald-50/30 rounded-2xl p-6 text-center hover:bg-emerald-50 transition-colors">
+                <FiFileText className="text-3xl text-emerald-400 mx-auto mb-2" />
+                <p className="text-sm font-semibold text-slate-700 mb-1">Sube tu archivo .xlsx o .xls</p>
+                <p className="text-xs text-slate-500 mb-3">Columnas requeridas: Usuario, Contacto, Contraseña, Rol</p>
+                
+                <label className="bg-white border border-emerald-200 text-emerald-700 px-4 py-2 rounded-lg text-sm font-bold cursor-pointer hover:bg-emerald-50 shadow-sm inline-block">
+                  Seleccionar Archivo
+                  <input type="file" required accept=".xlsx, .xls" className="hidden" onChange={(e) => setSelectedFile(e.target.files[0])} />
+                </label>
+              </div>
+
+              <div className="flex justify-center -mt-1">
+                <button type="button" onClick={handleDownloadTemplate} className="flex items-center gap-2 text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors">
+                  <FiDownload /> Descargar plantilla de ejemplo oficial
+                </button>
+              </div>
+
+              {selectedFile && (
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 flex items-center justify-between">
+                  <span className="truncate pr-4 font-medium">📄 {selectedFile.name}</span>
+                  <button type="button" onClick={() => setSelectedFile(null)} className="text-red-500 hover:text-red-700"><FiX /></button>
+                </div>
+              )}
+
+              <div className="flex gap-3 border-t border-slate-100 pt-4">
+                <button type="button" onClick={() => setIsUploadModalOpen(false)} className="flex-1 p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold rounded-xl text-sm transition-colors">
+                  Cancelar
+                </button>
+                <button type="submit" disabled={!selectedFile || isLoading} className={`flex-1 p-2.5 font-semibold rounded-xl text-sm transition-colors ${selectedFile ? 'bg-emerald-600 text-white shadow-md hover:bg-emerald-700' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>
+                  {isLoading ? 'Procesando...' : 'Procesar Carga'}
                 </button>
               </div>
             </form>

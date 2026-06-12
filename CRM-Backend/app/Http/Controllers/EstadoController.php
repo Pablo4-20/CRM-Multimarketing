@@ -15,12 +15,16 @@ class EstadoController extends Controller
         $request->merge(['nombre' => mb_strtoupper(trim($request->nombre), 'UTF-8')]);
 
         $request->validate([
-            'nombre' => 'required|string|max:255|unique:estados,nombre'
+            'nombre' => 'required|string|max:255|unique:estados,nombre',
+            'color' => 'nullable|string|max:10'
         ], [
             'nombre.unique' => 'Ya existe un estado con este nombre.'
         ]);
         
-        $estado = Estado::create(['nombre' => $request->nombre]);
+        $estado = Estado::create([
+            'nombre' => $request->nombre, 
+            'color' => $request->color ?? '#f59e0b'
+        ]);
         return response()->json($estado, 201);
     }
 
@@ -33,7 +37,11 @@ class EstadoController extends Controller
         $nuevosEstados = [];
         foreach ($request->estados as $estData) {
             $nombreUpper = mb_strtoupper(trim($estData['nombre']), 'UTF-8');
-            $estado = Estado::firstOrCreate(['nombre' => $nombreUpper]);
+            // Agregamos el color por defecto al crear masivamente
+            $estado = Estado::firstOrCreate(
+                ['nombre' => $nombreUpper],
+                ['color' => '#f59e0b']
+            );
             $nuevosEstados[] = $estado;
         }
         return response()->json(['message' => 'Carga exitosa', 'data' => $nuevosEstados], 201);
@@ -43,13 +51,20 @@ class EstadoController extends Controller
         $request->merge(['nombre' => mb_strtoupper(trim($request->nombre), 'UTF-8')]);
 
         $request->validate([
-            'nombre' => 'required|string|max:255|unique:estados,nombre,' . $id
+            'nombre' => 'required|string|max:255|unique:estados,nombre,' . $id,
+            'color' => 'nullable|string|max:10' // Agregada la validación del color
         ], [
             'nombre.unique' => 'Ya existe un estado con este nombre.'
         ]);
         
         $estado = Estado::findOrFail($id);
         $estado->nombre = $request->nombre;
+        
+        // Verificamos si se envía un color para actualizarlo
+        if ($request->has('color')) {
+            $estado->color = $request->color;
+        }
+        
         $estado->save();
         return response()->json($estado);
     }

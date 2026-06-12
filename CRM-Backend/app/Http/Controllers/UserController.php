@@ -37,7 +37,61 @@ class UserController extends Controller
         return response()->json(['message' => 'Usuario creado exitosamente', 'user' => $user], 201);
     }
 
-    // 3. Editar un usuario
+    // 3. Crear usuarios de forma masiva (Desde Excel)
+    public function storeMasivo(Request $request)
+    {
+        $request->validate([
+            'usuarios' => 'required|array',
+            'usuarios.*.name' => 'required|string|max:255',
+            'usuarios.*.email' => 'required|email|max:255',
+            'usuarios.*.password' => 'required|string|min:6',
+            'usuarios.*.role' => 'required|string'
+        ]);
+
+        $nuevosUsuarios = [];
+        $errores = [];
+
+        foreach ($request->usuarios as $index => $uData) {
+            $email = trim($uData['email']);
+
+            // Evitar colisiones de correos duplicados
+            if (User::where('email', $email)->exists()) {
+                $errores[] = "Fila " . ($index + 2) . ": El correo '{$email}' ya está registrado.";
+                continue;
+            }
+
+            // Homologar y validar roles válidos
+            $rol = strtolower(trim($uData['role']));
+            if (!in_array($rol, ['super-admin', 'admin', 'agente'])) {
+                $rol = 'agente'; // Rol por defecto si hay errores de escritura
+            }
+
+            $user = User::create([
+                'name' => trim($uData['name']),
+                'email' => $email,
+                'password' => Hash::make($uData['password']), // Encriptación segura
+                'role' => $rol,
+                'status' => 'Activo', // Estado por defecto
+            ]);
+
+            $nuevosUsuarios[] = $user;
+        }
+
+        // Si hubo errores de duplicados y no se pudo registrar ningún usuario
+        if (count($errores) > 0 && count($nuevosUsuarios) === 0) {
+            return response()->json([
+                'errors' => ['usuarios' => [implode(' | ', $errores)]]
+            ], 422);
+        }
+
+        return response()->json([
+            'message' => 'Carga masiva procesada correctamente',
+            'data' => $nuevosUsuarios,
+            'warnings' => $errores
+        ], 201);
+    }
+
+    // 4. Editar un usuario
     public function update(Request $request, $id)
     {
         $user = User::findOrFail($id);
@@ -64,7 +118,7 @@ class UserController extends Controller
         return response()->json(['message' => 'Usuario actualizado', 'user' => $user]);
     }
 
-    // 4. Eliminar y Transferir Datos
+    // 5. Eliminar y Transferir Datos
     public function destroy(Request $request, $id)
     {
         $user = User::findOrFail($id);
@@ -97,5 +151,17 @@ class UserController extends Controller
         $user->delete();
 
         return response()->json(['message' => 'Usuario eliminado y todo su historial transferido correctamente']);
+    }
+
+    // 6. Obtener actividad de un usuario específico
+    public function getActividad($id) {
+        // Obtenemos todos los comentarios/gestiones hechos por este usuario
+        // y cargamos la relación 'cliente' para saber a quién le comentó
+        $actividad = \App\Models\Comentario::with('cliente')
+            ->where('user_id', $id)
+            ->orderBy('created_at', 'desc')
+            ->get();
+            
+        return response()->json($actividad);
     }
 }

@@ -1,6 +1,7 @@
 import { 
   FiHome, FiUserCheck, FiUsers, FiBarChart2, 
-  FiSettings, FiLogOut, FiChevronLeft, FiChevronRight, FiTag, FiCheckSquare, FiUser
+  FiSettings, FiLogOut, FiChevronLeft, FiChevronRight, 
+  FiTag, FiCheckSquare, FiUser, FiActivity // <-- Agregado FiActivity
 } from 'react-icons/fi';
 
 const Sidebar = ({ isCollapsed, toggleSidebar, activeTab, setActiveTab, onLogout, user }) => {
@@ -10,7 +11,6 @@ const Sidebar = ({ isCollapsed, toggleSidebar, activeTab, setActiveTab, onLogout
   const isAdmin = user?.role === 'super-admin' || user?.role === 'admin';
 
   return (
-    // CAMBIO IMPORTANTE: Añadí h-screen para que el menú ocupe el alto total de la ventana
     <div className={`${isCollapsed ? 'w-20' : 'w-[260px]'} bg-white border-r border-slate-200 h-screen transition-all duration-300 flex flex-col shrink-0 z-10`}>
       
       {/* 1. CABECERA (Fija arriba) */}
@@ -51,6 +51,12 @@ const Sidebar = ({ isCollapsed, toggleSidebar, activeTab, setActiveTab, onLogout
             <li onClick={() => setActiveTab('usuarios')} className={`px-4 py-3 rounded-lg cursor-pointer flex items-center gap-3 font-medium transition-colors shrink-0 ${activeTab === 'usuarios' ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-slate-500 hover:bg-slate-50'}`}>
               <FiUserCheck className="text-xl shrink-0" />
               {!isCollapsed && <span className="truncate">Gestión Usuarios</span>}
+            </li>
+
+            {/* NUEVO BOTÓN DE SEGUIMIENTO DE AGENTES */}
+            <li onClick={() => setActiveTab('seguimiento_agentes')} className={`px-4 py-3 rounded-lg cursor-pointer flex items-center gap-3 font-medium transition-colors shrink-0 ${activeTab === 'seguimiento_agentes' ? 'bg-indigo-50 text-indigo-600 font-semibold' : 'text-slate-500 hover:bg-slate-50'}`}>
+              <FiActivity className="text-xl shrink-0" />
+              {!isCollapsed && <span className="truncate">Seguimiento Agentes</span>}
             </li>
             
             <li onClick={() => setActiveTab('asignaciones')} className={`px-4 py-3 rounded-lg cursor-pointer flex items-center gap-3 font-medium transition-colors shrink-0 ${activeTab === 'asignaciones' ? 'bg-slate-800 text-white font-semibold shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>

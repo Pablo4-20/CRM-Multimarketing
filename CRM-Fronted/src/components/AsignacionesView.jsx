@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { 
   FiSearch, FiCheckSquare, FiX, FiUsers, FiTag, FiVolume2, FiUser,
-  FiEdit2, FiTrash2, FiAlertTriangle, FiUserMinus, FiFilter
+  FiEdit2, FiUserMinus, FiFilter
 } from 'react-icons/fi';
 import api from '../api';
 
-const AsignacionesView = () => {
+const AsignacionesView = ({ currentUser }) => {
   const [clientes, setClientes] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
   
@@ -21,12 +22,15 @@ const AsignacionesView = () => {
   const [formData, setFormData] = useState({ user_id: '', campana_id: '', estado_id: '' });
   const [isLoading, setIsLoading] = useState(false);
 
-  // ======================= NUEVO: ESTADOS DE FILTROS =======================
+  // ======================= ESTADOS DE FILTROS Y ORDENAMIENTO =======================
   const [searchTerm, setSearchTerm] = useState('');
   const [filterAgente, setFilterAgente] = useState('');
   const [filterCampana, setFilterCampana] = useState('');
   const [filterEstado, setFilterEstado] = useState('');
-  // =========================================================================
+  const [sortBy, setSortBy] = useState('newest'); // 'newest', 'oldest', 'name-asc', 'name-desc'
+
+  // Verificación de permisos para ver la ficha del cliente
+  const canViewFicha = currentUser?.role === 'admin' || currentUser?.role === 'super_admin';
 
   useEffect(() => {
     fetchClientes();
@@ -53,60 +57,80 @@ const AsignacionesView = () => {
     }
   };
 
-  // ======================= NUEVO: LÓGICA DE FILTRADO =======================
-  const clientesFiltrados = clientes.filter(cliente => {
-    // 1. Filtro por búsqueda de texto (nombre)
-    const matchSearch = cliente.nombre.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    // 2. Filtros por selectores (Agente, Campaña, Estado)
-    // Permite buscar por un ID específico, o por "unassigned" (los que no tienen dato)
-    const matchAgente = filterAgente === '' || 
-      (filterAgente === 'unassigned' ? !cliente.user : cliente.user?.id.toString() === filterAgente);
+  // ======================= LÓGICA DE FILTRADO Y ORDENAMIENTO =======================
+  const clientesFiltrados = clientes
+    .filter(cliente => {
+      // 1. Filtro por búsqueda de texto (nombre)
+      const matchSearch = cliente.nombre?.toLowerCase().includes(searchTerm.toLowerCase());
       
-    const matchCampana = filterCampana === '' || 
-      (filterCampana === 'unassigned' ? !cliente.campana : cliente.campana?.id.toString() === filterCampana);
-      
-    const matchEstado = filterEstado === '' || 
-      (filterEstado === 'unassigned' ? !cliente.estado : cliente.estado?.id.toString() === filterEstado);
+      // 2. Filtros por selectores (Agente, Campaña, Estado)
+      const matchAgente = filterAgente === '' || 
+        (filterAgente === 'unassigned' ? !cliente.user : cliente.user?.id?.toString() === filterAgente);
+        
+      const matchCampana = filterCampana === '' || 
+        (filterCampana === 'unassigned' ? !cliente.campana : cliente.campana?.id?.toString() === filterCampana);
+        
+      const matchEstado = filterEstado === '' || 
+        (filterEstado === 'unassigned' ? !cliente.estado : cliente.estado?.id?.toString() === filterEstado);
 
-    return matchSearch && matchAgente && matchCampana && matchEstado;
-  });
+      return matchSearch && matchAgente && matchCampana && matchEstado;
+    })
+    .sort((a, b) => {
+      // 3. Aplicación del criterio de ordenamiento seleccionado
+      if (sortBy === 'name-asc') {
+        return (a.nombre || '').localeCompare(b.nombre || '');
+      }
+      if (sortBy === 'name-desc') {
+        return (b.nombre || '').localeCompare(a.nombre || '');
+      }
+      if (sortBy === 'oldest') {
+        // Compara por fecha de creación o en su defecto por ID incremental
+        return (a.created_at || a.id) > (b.created_at || b.id) ? 1 : -1;
+      }
+      if (sortBy === 'newest') {
+        return (b.created_at || b.id) > (a.created_at || a.id) ? 1 : -1;
+      }
+      return 0;
+    });
 
   const clearFilters = () => {
     setSearchTerm('');
     setFilterAgente('');
     setFilterCampana('');
     setFilterEstado('');
+    setSortBy('newest');
   };
-  // =========================================================================
 
-  // CHECKBOXES (Ajustados para funcionar solo con los filtrados)
+  // ======================= LÓGICA DE CHECKBOXES INTELIGENTES =======================
+  const isAllFilteredSelected = clientesFiltrados.length > 0 && 
+    clientesFiltrados.every(c => selectedIds.includes(c.id));
+
   const handleSelectAll = (e) => {
+    const visibleIds = clientesFiltrados.map(c => c.id);
     if (e.target.checked) {
-      // Si selecciona todo, solo selecciona los que están visibles bajo los filtros actuales
-      setSelectedIds(clientesFiltrados.map(c => c.id));
+      setSelectedIds(prev => [...new Set([...prev, ...visibleIds])]);
     } else {
-      setSelectedIds([]);
+      setSelectedIds(prev => prev.filter(id => !visibleIds.includes(id)));
     }
   };
 
   const handleSelectOne = (e, id) => {
     if (e.target.checked) {
-      setSelectedIds([...selectedIds, id]);
+      setSelectedIds(prev => [...prev, id]);
     } else {
-      setSelectedIds(selectedIds.filter(selectedId => selectedId !== id));
+      setSelectedIds(prev => prev.filter(selectedId => selectedId !== id));
     }
   };
 
-  // ASIGNAR / EDITAR
+  // ======================= ASIGNAR / EDITAR =======================
   const openAssignModalBulk = () => {
     if (selectedIds.length === 0) return;
     if (selectedIds.length === 1) {
       const clienteSeleccionado = clientes.find(c => c.id === selectedIds[0]);
       setFormData({
-        user_id: clienteSeleccionado.user_id || '',
-        campana_id: clienteSeleccionado.campana_id || '',
-        estado_id: clienteSeleccionado.estado_id || ''
+        user_id: clienteSeleccionado?.user_id || '',
+        campana_id: clienteSeleccionado?.campana_id || '',
+        estado_id: clienteSeleccionado?.estado_id || ''
       });
     } else {
       setFormData({ user_id: '', campana_id: '', estado_id: '' });
@@ -145,7 +169,7 @@ const AsignacionesView = () => {
     }
   };
 
-  // REMOVER ASIGNACIÓN (ELIMINAR)
+  // ======================= REMOVER ASIGNACIÓN =======================
   const openUnassignModalSingle = (id) => {
     setIdsToUnassign([id]);
     setIsUnassignModalOpen(true);
@@ -175,6 +199,9 @@ const AsignacionesView = () => {
     }
   };
 
+  // El botón limpiar se activa si cambias los filtros o si el orden no es el predeterminado
+  const hasActiveFilters = searchTerm || filterAgente || filterCampana || filterEstado || sortBy !== 'newest';
+
   return (
     <div className="animate-fadeIn w-full">
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden w-full">
@@ -202,7 +229,11 @@ const AsignacionesView = () => {
               <button 
                 onClick={openAssignModalBulk}
                 disabled={selectedIds.length === 0}
-                className={`flex items-center justify-center gap-2 px-5 py-2 rounded-lg font-medium transition-all text-sm w-full sm:w-auto shrink-0 ${selectedIds.length > 0 ? 'bg-slate-800 text-white hover:bg-slate-900 shadow-md' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
+                className={`flex items-center justify-center gap-2 px-5 py-2 rounded-lg font-medium transition-all text-sm w-full sm:w-auto shrink-0 ${
+                  selectedIds.length > 0 
+                    ? 'bg-slate-800 text-white hover:bg-slate-900 shadow-md' 
+                    : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                }`}
               >
                 <FiCheckSquare className="text-lg" /> Asignar / Editar ({selectedIds.length})
               </button>
@@ -210,63 +241,74 @@ const AsignacionesView = () => {
           </div>
 
           {/* Fila 2: Barra de Filtros */}
-<div className="flex flex-col lg:flex-row gap-3 w-full bg-slate-50/50 p-3 rounded-xl border border-slate-100">
-  {/* Input Nombre */}
-  <div className="relative flex-1 min-w-[200px]">
-    <FiSearch className="absolute left-3 top-2.5 text-slate-400 text-lg" />
-    <input 
-      type="text" 
-      placeholder="Buscar por nombre..." 
-      value={searchTerm}
-      onChange={(e) => setSearchTerm(e.target.value)}
-      className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500 box-border"
-    />
-  </div>
+          <div className="flex flex-col lg:flex-row gap-3 w-full bg-slate-50/50 p-3 rounded-xl border border-slate-100">
+            {/* Input Nombre */}
+            <div className="relative flex-1 min-w-[180px]">
+              <FiSearch className="absolute left-3 top-2.5 text-slate-400 text-lg" />
+              <input 
+                type="text" 
+                placeholder="Buscar por nombre..." 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500 box-border"
+              />
+            </div>
 
-  {/* Select Agente */}
-  <select 
-    value={filterAgente}
-    onChange={(e) => setFilterAgente(e.target.value)}
-    className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 font-medium focus:outline-none focus:ring-2 focus:ring-slate-500 min-w-[140px]"
-  >
-    <option value="">Todos los Agentes</option>
-    <option value="unassigned">Sin Agente</option>
-    {usuarios.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-  </select>
+            {/* Select Agente */}
+            <select 
+              value={filterAgente}
+              onChange={(e) => setFilterAgente(e.target.value)}
+              className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 font-medium focus:outline-none focus:ring-2 focus:ring-slate-500 min-w-[140px]"
+            >
+              <option value="">Todos los Agentes</option>
+              <option value="unassigned">Sin Agente</option>
+              {usuarios.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </select>
 
-  {/* Select Campaña */}
-  <select 
-    value={filterCampana}
-    onChange={(e) => setFilterCampana(e.target.value)}
-    className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 font-medium focus:outline-none focus:ring-2 focus:ring-slate-500 min-w-[140px]"
-  >
-    <option value="">Todas las Campañas</option>
-    <option value="unassigned">Sin Campaña</option>
-    {campanas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-  </select>
+            {/* Select Campaña */}
+            <select 
+              value={filterCampana}
+              onChange={(e) => setFilterCampana(e.target.value)}
+              className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 font-medium focus:outline-none focus:ring-2 focus:ring-slate-500 min-w-[140px]"
+            >
+              <option value="">Todas las Campañas</option>
+              <option value="unassigned">Sin Campaña</option>
+              {campanas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+            </select>
 
-  {/* Select Estado */}
-  <select 
-    value={filterEstado}
-    onChange={(e) => setFilterEstado(e.target.value)}
-    className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 font-medium focus:outline-none focus:ring-2 focus:ring-slate-500 min-w-[140px]"
-  >
-    <option value="">Todos los Estados</option>
-    <option value="unassigned">Sin Estado</option>
-    {estados.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
-  </select>
+            {/* Select Estado */}
+            <select 
+              value={filterEstado}
+              onChange={(e) => setFilterEstado(e.target.value)}
+              className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 font-medium focus:outline-none focus:ring-2 focus:ring-slate-500 min-w-[140px]"
+            >
+              <option value="">Todos los Estados</option>
+              <option value="unassigned">Sin Estado</option>
+              {estados.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+            </select>
 
-  {/* Botón Limpiar */}
-  {(searchTerm || filterAgente || filterCampana || filterEstado) && (
-    <button 
-      onClick={clearFilters}
-      className="flex items-center justify-center gap-2 px-4 py-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg text-sm font-medium transition-colors shrink-0"
-    >
-      <FiX /> Limpiar
-    </button>
-  )}
-</div>
+            {/* Select Ordenamiento */}
+            <select 
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 font-semibold focus:outline-none focus:ring-2 focus:ring-slate-500 min-w-[150px] bg-slate-50"
+            >
+              <option value="newest">Más reciente</option>
+              <option value="oldest">Más antiguo</option>
+              <option value="name-asc">Nombre (A-Z)</option>
+              <option value="name-desc">Nombre (Z-A)</option>
+            </select>
 
+            {/* Botón Limpiar */}
+            {hasActiveFilters && (
+              <button 
+                onClick={clearFilters}
+                className="flex items-center justify-center gap-2 px-4 py-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg text-sm font-medium transition-colors shrink-0"
+              >
+                <FiX /> Limpiar
+              </button>
+            )}
+          </div>
         </div>
 
         {/* TABLA DE ASIGNACIONES */}
@@ -278,10 +320,11 @@ const AsignacionesView = () => {
                   <input 
                     type="checkbox" 
                     onChange={handleSelectAll} 
-                    checked={selectedIds.length === clientesFiltrados.length && clientesFiltrados.length > 0}
+                    checked={isAllFilteredSelected}
                     className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                   />
                 </th>
+                <th className="p-4 w-16 text-center">ID</th>
                 <th className="p-4">Cliente</th>
                 <th className="p-4">Agente Asignado</th>
                 <th className="p-4">Campaña</th>
@@ -292,57 +335,91 @@ const AsignacionesView = () => {
             <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
               {clientesFiltrados.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="text-center p-8 text-slate-400">
+                  <td colSpan="7" className="text-center p-8 text-slate-400">
                     {clientes.length === 0 ? 'No hay clientes importados.' : 'No se encontraron clientes con esos filtros.'}
                   </td>
                 </tr>
-              ) : clientesFiltrados.map((cliente) => (
-                <tr key={cliente.id} className={`hover:bg-slate-50/80 transition-colors ${selectedIds.includes(cliente.id) ? 'bg-slate-100/60' : ''}`}>
-                  <td className="p-4 text-center">
-                    <input 
-                      type="checkbox" 
-                      onChange={(e) => handleSelectOne(e, cliente.id)}
-                      checked={selectedIds.includes(cliente.id)}
-                      className="w-4 h-4 rounded border-slate-300 text-slate-800 focus:ring-slate-800 cursor-pointer"
-                    />
-                  </td>
-                  <td className="p-4 font-semibold text-slate-900">{cliente.nombre}</td>
-                  
-                  <td className="p-4">
-                    {cliente.user ? (
-                      <span className="flex items-center gap-2 text-slate-700 bg-slate-100 px-3 py-1 rounded-full text-xs font-medium w-fit"><FiUser className="text-slate-500"/> {cliente.user.name}</span>
-                    ) : <span className="text-slate-400 text-xs italic">Sin Asignar</span>}
-                  </td>
-                  
-                  <td className="p-4">
-                    {cliente.campana ? (
-                      <span className="flex items-center gap-2 text-blue-700 bg-blue-50 border border-blue-100 px-2 py-1 rounded text-xs font-medium w-fit"><FiVolume2/> {cliente.campana.nombre}</span>
-                    ) : <span className="text-slate-400 text-xs italic">-</span>}
-                  </td>
+              ) : (
+                clientesFiltrados.map((cliente) => (
+                  <tr key={cliente.id} className={`hover:bg-slate-50/80 transition-colors ${selectedIds.includes(cliente.id) ? 'bg-slate-100/60' : ''}`}>
+                    <td className="p-4 text-center">
+                      <input 
+                        type="checkbox" 
+                        onChange={(e) => handleSelectOne(e, cliente.id)}
+                        checked={selectedIds.includes(cliente.id)}
+                        className="w-4 h-4 rounded border-slate-300 text-slate-800 focus:ring-slate-800 cursor-pointer"
+                      />
+                    </td>
+                    <td className="p-4 text-center font-medium text-slate-500">
+                      #{cliente.id}
+                    </td>
+                    <td className="p-4 font-semibold text-slate-900">
+                      {canViewFicha ? (
+                        <Link 
+                          to={`/clientes/ficha/${cliente.id}`} 
+                          className="text-blue-600 hover:text-blue-800 hover:underline transition-colors"
+                        >
+                          {cliente.nombre}
+                        </Link>
+                      ) : (
+                        <span>{cliente.nombre}</span>
+                      )}
+                    </td>
+                    
+                    <td className="p-4">
+                      {cliente.user ? (
+                        <span className="flex items-center gap-2 text-slate-700 bg-slate-100 px-3 py-1 rounded-full text-xs font-medium w-fit">
+                          <FiUser className="text-slate-500"/> {cliente.user.name}
+                        </span>
+                      ) : <span className="text-slate-400 text-xs italic">Sin Asignar</span>}
+                    </td>
+                    
+                    <td className="p-4">
+                      {cliente.campana ? (
+                        <span className="flex items-center gap-2 text-blue-700 bg-blue-50 border border-blue-100 px-2 py-1 rounded text-xs font-medium w-fit">
+                          <FiVolume2/> {cliente.campana.nombre}
+                        </span>
+                      ) : <span className="text-slate-400 text-xs italic">-</span>}
+                    </td>
 
-                  <td className="p-4">
-                    {cliente.estado ? (
-                      <span className="flex items-center gap-2 text-amber-700 bg-amber-50 border border-amber-100 px-2 py-1 rounded text-xs font-medium w-fit"><FiTag/> {cliente.estado.nombre}</span>
-                    ) : <span className="text-slate-400 text-xs italic">-</span>}
-                  </td>
+                    <td className="p-4">
+                      {cliente.estado ? (
+                        <span 
+                          className="flex items-center gap-2 px-2.5 py-1 rounded text-xs font-semibold w-fit text-slate-700"
+                          style={{ 
+                            backgroundColor: `${cliente.estado.color || '#f59e0b'}26`, 
+                            border: `1px solid ${cliente.estado.color || '#f59e0b'}40` 
+                          }}
+                        >
+                          <FiTag style={{ color: cliente.estado.color || '#f59e0b' }} /> {cliente.estado.nombre}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 text-xs italic">-</span>
+                      )}
+                    </td>
 
-                  <td className="p-4 text-center">
-                    <div className="flex items-center justify-center gap-2">
-                      <button onClick={() => openAssignModalSingle(cliente)} className="p-2 text-slate-500 bg-slate-100 hover:bg-slate-200 hover:text-slate-800 rounded-lg transition-colors" title="Editar Asignación">
-                        <FiEdit2 size={16} />
-                      </button>
-                      <button 
-                        onClick={() => openUnassignModalSingle(cliente.id)} 
-                        className="p-2 text-red-500 bg-red-50 hover:bg-red-100 hover:text-red-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed" 
-                        title="Remover Asignación"
-                        disabled={!cliente.user && !cliente.campana && !cliente.estado} 
-                      >
-                        <FiUserMinus size={16} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    <td className="p-4 text-center">
+                      <div className="flex items-center justify-center gap-2">
+                        <button 
+                          onClick={() => openAssignModalSingle(cliente)} 
+                          className="p-2 text-slate-500 bg-slate-100 hover:bg-slate-200 hover:text-slate-800 rounded-lg transition-colors" 
+                          title="Editar Asignación"
+                        >
+                          <FiEdit2 size={16} />
+                        </button>
+                        <button 
+                          onClick={() => openUnassignModalSingle(cliente.id)} 
+                          className="p-2 text-red-500 bg-red-50 hover:bg-red-100 hover:text-red-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed" 
+                          title="Remover Asignación"
+                          disabled={!cliente.user && !cliente.campana && !cliente.estado} 
+                        >
+                          <FiUserMinus size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
