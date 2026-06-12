@@ -1,10 +1,7 @@
-import { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+ import { useState, useEffect } from 'react';
 import DashboardLayout from './components/DashboardLayout';
 import Login from './components/Login';
-import FichaCliente from './components/FichaCliente'; // Importamos el nuevo componente
-
-import api from './api';
+import api from './api'; // Asegúrate de importar tu configuración de Axios
 
 function App() {
   const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('user')) || null);
@@ -29,15 +26,17 @@ function App() {
   // ========================================================
   useEffect(() => {
     const validarUsuarioEnBaseDeDatos = async () => {
+      // Si hay un usuario en el navegador, comprobamos si es real
       if (user) {
         try {
           const response = await api.get('/users');
           
+          // Verificamos si el ID del usuario actual sigue en la base de datos
           const usuarioExiste = response.data.some(u => u.id === user.id);
           
           if (!usuarioExiste) {
             console.warn("Usuario fantasma detectado. La cuenta fue eliminada o la BD se vació.");
-            handleLogout(); 
+            handleLogout(); // Forzamos el cierre de sesión
           }
         } catch (error) {
           console.error("Error al validar la sesión fantasma:", error);
@@ -46,42 +45,16 @@ function App() {
     };
 
     validarUsuarioEnBaseDeDatos();
-  }, []); 
+  }, []); // El corchete vacío asegura que solo se ejecute al recargar la página
 
   return (
-    <Router>
-      <Routes>
-        {/* Ruta principal: Carga tu sistema de pestañas (DashboardLayout) */}
-        <Route 
-          path="/" 
-          element={user ? <DashboardLayout onLogout={handleLogout} user={user} /> : <Navigate to="/login" />} 
-        />
-
-        {/* Ruta del Login */}
-        <Route 
-          path="/login" 
-          element={!user ? <Login onLogin={handleLogin} /> : <Navigate to="/" />} 
-        />
-
-        {/* Ruta específica para la Ficha del Cliente */}
-        <Route 
-          path="/clientes/ficha/:id" 
-          element={
-            user ? (
-              // Usamos el DashboardLayout como "envoltura" y le pasamos la ficha adentro
-              <DashboardLayout onLogout={handleLogout} user={user}>
-                <FichaCliente />
-              </DashboardLayout>
-            ) : (
-              <Navigate to="/login" />
-            )
-          } 
-        />
-
-        {/* Redirección por defecto si la ruta no existe */}
-        <Route path="*" element={<Navigate to="/" />} />
-      </Routes>
-    </Router>
+    <>
+      {user ? (
+        <DashboardLayout onLogout={handleLogout} user={user} /> 
+      ) : (
+        <Login onLogin={handleLogin} />
+      )}
+    </>
   );
 }
 
