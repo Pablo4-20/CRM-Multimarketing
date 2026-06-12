@@ -13,22 +13,6 @@ class ClienteController extends Controller
         return response()->json(Cliente::with(['user', 'campana', 'estado'])->orderBy('id', 'desc')->get());
     }
 
-    // =========================================================
-    // NUEVO MÉTODO SHOW PARA CARGAR LA FICHA DEL CLIENTE
-    // =========================================================
-    public function show($id) {
-        $cliente = Cliente::with([
-            'user', 
-            'campana', 
-            'estado', 
-            'comentarios' => function($query) {
-                $query->orderBy('created_at', 'desc')->with('user');
-            }
-        ])->findOrFail($id);
-        
-        return response()->json($cliente);
-    }
-
     public function storeMasivo(Request $request) {
         $request->validate([
             'clientes' => 'required|array',
@@ -128,26 +112,10 @@ class ClienteController extends Controller
     }
 
     public function update(Request $request, $id) {
-        $request->validate([
-            'nombre' => 'required|string|max:255'
-        ]);
-
+        $request->validate(['nombre' => 'required|string|max:255']);
         $cliente = Cliente::findOrFail($id);
-        
-        // Preparamos los datos base a actualizar
-        $dataToUpdate = $request->only(['nombre', 'email', 'telefono', 'campana_id', 'user_id', 'estado_id', 'notas']);
-        
-        // Mapeamos 'correo' del frontend a 'email' de la base de datos si viene en el request
-        if ($request->has('correo')) {
-            $dataToUpdate['email'] = $request->correo;
-        }
-
-        $cliente->update($dataToUpdate);
-        
-        return response()->json([
-            'message' => 'Datos actualizados correctamente',
-            'cliente' => $cliente
-        ]);
+        $cliente->update($request->only(['nombre', 'email', 'telefono', 'campana_id', 'user_id', 'estado_id']));
+        return response()->json($cliente);
     }
 
     public function destroy($id) {
