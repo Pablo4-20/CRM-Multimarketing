@@ -248,7 +248,8 @@ const ClientesView = ({ user }) => {
     const searchLower = searchTerm.toLowerCase();
     const matchTexto = 
       (cliente.nombre && cliente.nombre.toLowerCase().includes(searchLower)) ||
-      (cliente.telefono && cliente.telefono.includes(searchTerm));
+      (cliente.telefono && cliente.telefono.includes(searchTerm)) ||
+      (cliente.id && cliente.id.toString().includes(searchTerm)); // <-- BUSQUEDA POR ID
 
     const matchCampana = filtroCampana ? 
       (cliente.campana?.id.toString() === filtroCampana.toString() || cliente.campana_id?.toString() === filtroCampana.toString()) 
@@ -287,7 +288,7 @@ const ClientesView = ({ user }) => {
               <FiSearch className="absolute left-3 top-2.5 text-slate-400 text-lg" />
               <input 
                 type="text" 
-                placeholder="Buscar nombre o número..." 
+                placeholder="Buscar nombre, número o ID..." 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 box-border"

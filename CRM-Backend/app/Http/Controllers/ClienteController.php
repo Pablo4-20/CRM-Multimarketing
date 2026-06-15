@@ -50,14 +50,15 @@ class ClienteController extends Controller
                     $motivoOmitido = 'el número de teléfono ya está registrado';
                 }
             }
-
+            // ELIMINA O COMENTA ESTE BLOQUE COMPLETO
             // 3. Buscar duplicado por Nombre (si no hay email ni teléfono duplicados)
-            if (!$clienteExistente) {
+            /* if (!$clienteExistente) {
                 $clienteExistente = Cliente::where('nombre', trim($cliData['nombre']))->first();
                 if ($clienteExistente) {
                     $motivoOmitido = 'ya existe un cliente con ese mismo nombre';
                 }
             }
+            */
 
             // SI EL CLIENTE YA EXISTE, REGISTRAMOS EL MOTIVO Y LO SALTAMOS
             if ($clienteExistente) {

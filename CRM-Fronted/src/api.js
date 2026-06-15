@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'http://169.254.226.206:8000/api', // <-- Aquí va tu IP
+  baseURL: 'http://192.168.18.39:8000/api', // <-- Aquí va tu IP
   headers: {
     'Content-Type': 'application/json; charset=utf-8',
     'Accept': 'application/json; charset=utf-8'
