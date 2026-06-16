@@ -51,6 +51,7 @@ Route::post('/clientes', [ClienteController::class, 'store']);
 Route::post('/clientes/masivo', [ClienteController::class, 'storeMasivo']); 
 Route::put('/clientes/{id}', [ClienteController::class, 'update']);
 Route::delete('/clientes/{id}', [ClienteController::class, 'destroy']);
+Route::get('/clientes/{id}', [ClienteController::class, 'show']);
 
 // ---> NUEVAS RUTAS PARA EDITAR Y ELIMINAR COMENTARIOS <---
 Route::put('/comentarios/{id}', [ClienteController::class, 'updateComentario']);

@@ -19,7 +19,7 @@ const AsignacionesView = () => {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedCliente, setSelectedCliente] = useState(null);
   
-  // Estados de edición
+  // Estados de edición de información general
   const [isEditingInfo, setIsEditingInfo] = useState(false);
   const [isEditingEstado, setIsEditingEstado] = useState(false);
   
@@ -31,6 +31,11 @@ const AsignacionesView = () => {
   const comentariosEndRef = useRef(null);
   const [isAgendarModalOpen, setIsAgendarModalOpen] = useState(false);
   const [isLoadingComentarios, setIsLoadingComentarios] = useState(false);
+
+  // Estados para edición de comentarios
+  const [editingComentarioId, setEditingComentarioId] = useState(null);
+  const [editingComentarioText, setEditingComentarioText] = useState('');
+  const [isSavingComentario, setIsSavingComentario] = useState(false);
 
   const [usuarios, setUsuarios] = useState([]);
   const [campanas, setCampanas] = useState([]);
@@ -78,7 +83,6 @@ const AsignacionesView = () => {
 
   const clientesFiltrados = clientes
     .filter(cliente => {
-      // BUSCAR POR NOMBRE O POR ID
       const matchSearch = 
         cliente.nombre?.toLowerCase().includes(searchTerm.toLowerCase()) || 
         cliente.id?.toString().includes(searchTerm);
@@ -204,9 +208,7 @@ const AsignacionesView = () => {
 
   // ======================= LÓGICA FICHA DE CLIENTE =======================
   
-  // ---> AQUI MODIFICAMOS PARA TRAER LOS COMENTARIOS DEL CLIENTE <---
   const openDetailModal = async (cliente) => {
-    // 1. Abrimos el modal con los datos básicos que ya tenemos en memoria
     setSelectedCliente(cliente);
     setEditFormData({
       nombre: cliente.nombre || '',
@@ -217,22 +219,18 @@ const AsignacionesView = () => {
     setIsEditingEstado(false); 
     setActiveTab('gestion');
     setIsDetailModalOpen(true);
-    setIsLoadingComentarios(true); // Empezamos a cargar los comentarios
+    setIsLoadingComentarios(true);
 
-    // 2. Hacemos la petición a la API para traer todo el historial de ese cliente
     try {
-      // Hacemos un GET al endpoint de detalle del cliente
       const response = await api.get(`/clientes/${cliente.id}`);
       const dataClienteCompleto = response.data.cliente || response.data;
-      
-      // Actualizamos el estado con los datos completos (que incluyen los 'comentarios')
       if (dataClienteCompleto) {
         setSelectedCliente(prev => ({ ...prev, ...dataClienteCompleto }));
       }
     } catch (error) {
       console.error("Error al cargar el historial del cliente:", error);
     } finally {
-      setIsLoadingComentarios(false); // Terminamos de cargar
+      setIsLoadingComentarios(false);
     }
   };
 
@@ -280,6 +278,41 @@ const AsignacionesView = () => {
     }
   };
 
+  // ================= FUNCIONES PARA EDITAR COMENTARIOS =================
+  const startEditingComentario = (comentario) => {
+    setEditingComentarioId(comentario.id);
+    setEditingComentarioText(comentario.texto);
+  };
+
+  const cancelEditingComentario = () => {
+    setEditingComentarioId(null);
+    setEditingComentarioText('');
+  };
+
+  const handleUpdateComentario = async (comentarioId) => {
+    if (!editingComentarioText.trim()) return;
+    setIsSavingComentario(true);
+    try {
+      // Hacemos la petición pasando el nuevo texto. Laravel actualizará 'updated_at' automáticamente.
+      const response = await api.put(`/comentarios/${comentarioId}`, { texto: editingComentarioText });
+      
+      // Actualizamos el comentario en el estado local con la respuesta que incluye el nuevo updated_at
+      const updatedComentarioData = response.data.comentario;
+      
+      const updatedComentarios = selectedCliente.comentarios.map(c => 
+        c.id === comentarioId ? { ...c, texto: editingComentarioText, updated_at: updatedComentarioData?.updated_at || new Date().toISOString() } : c
+      );
+      
+      setSelectedCliente({ ...selectedCliente, comentarios: updatedComentarios });
+      setEditingComentarioId(null);
+      setEditingComentarioText('');
+    } catch (error) {
+      console.error("Error al actualizar el comentario:", error);
+    } finally {
+      setIsSavingComentario(false);
+    }
+  };
+
   const verificarCitaPendiente = (texto) => {
     if (!texto) return false;
     const txt = texto.toLowerCase();
@@ -295,7 +328,6 @@ const AsignacionesView = () => {
     return "bg-slate-100 text-slate-700";
   };
 
-  // Preparar datos para los tabs
   const comentarios = selectedCliente?.comentarios || [];
   const comentariosNormales = comentarios.filter(c => c.tipo !== 'cita' && !c.es_cita);
   const historialCitas = comentarios.filter(c => c.tipo === 'cita' || c.es_cita);
@@ -304,7 +336,6 @@ const AsignacionesView = () => {
   const isAllFilteredSelected = clientesFiltrados.length > 0 && clientesFiltrados.every(c => selectedIds.includes(c.id));
   const hasActiveFilters = searchTerm || sortCliente || filterAgente || filterCampana || filterEstado;
 
-  // ======================= LÓGICA DE NAVEGACIÓN =======================
   const currentIndex = selectedCliente ? clientesFiltrados.findIndex(c => c.id === selectedCliente.id) : -1;
   const hasPrev = currentIndex > 0;
   const hasNext = currentIndex !== -1 && currentIndex < clientesFiltrados.length - 1;
@@ -696,6 +727,16 @@ const AsignacionesView = () => {
                       const isCita = activeTab === 'citas';
                       const esPendiente = isCita ? verificarCitaPendiente(comentario.texto) : false;
 
+                      // Lógica para detectar si el comentario fue editado
+                      const isEdited = comentario.updated_at && comentario.updated_at !== comentario.created_at;
+                      let editDateStr = '';
+                      let editTimeStr = '';
+                      if (isEdited) {
+                        const editObj = new Date(comentario.updated_at);
+                        editDateStr = editObj.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
+                        editTimeStr = editObj.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+                      }
+
                       return (
                         <div key={comentario.id || index} className="flex gap-3 animate-fadeIn">
                           <div className="flex-shrink-0">
@@ -717,14 +758,64 @@ const AsignacionesView = () => {
                                   )}
                                   {comentario.estado || (isCita ? (esPendiente ? 'Cita Pendiente' : 'Completada / Pasada') : 'Gestión Registrada')}
                                 </span>
-
                               </div>
-                              <div className="text-right">
+                              <div className="text-right flex flex-col items-end">
                                 <div className="text-sm font-semibold text-slate-500 capitalize">{formattedDate}</div>
                                 <div className="text-xs text-slate-400 mt-0.5 font-medium">{formattedTime}</div>
+                                
+                                {/* Etiqueta de hora de edición */}
+                                {isEdited && (
+                                  <div className="text-[10px] text-teal-600 mt-1 font-medium italic bg-teal-50 px-1.5 py-0.5 rounded border border-teal-100" title="Última modificación">
+                                    Editado: {editDateStr} {editTimeStr}
+                                  </div>
+                                )}
                               </div>
                             </div>
-                            <p className="mt-4 text-base text-slate-800 leading-relaxed whitespace-pre-wrap">{comentario.texto}</p>
+                            
+                            {/* ================= ZONA DE TEXTO Y EDICIÓN ================= */}
+                            {editingComentarioId === comentario.id ? (
+                              <div className="mt-4 animate-fadeIn">
+                                <textarea
+                                  autoFocus
+                                  value={editingComentarioText}
+                                  onChange={(e) => setEditingComentarioText(e.target.value)}
+                                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-700 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none resize-none min-h-[100px]"
+                                />
+                                <div className="flex gap-2 mt-3 justify-end">
+                                  <button
+                                    onClick={cancelEditingComentario}
+                                    disabled={isSavingComentario}
+                                    className="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                                  >
+                                    Cancelar
+                                  </button>
+                                  <button
+                                    onClick={() => handleUpdateComentario(comentario.id)}
+                                    disabled={isSavingComentario || !editingComentarioText.trim()}
+                                    className="px-4 py-2 text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50"
+                                  >
+                                    {isSavingComentario ? 'Guardando...' : <><FiSave size={14}/> Guardar</>}
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="group relative">
+                                <p className="mt-4 text-base text-slate-800 leading-relaxed whitespace-pre-wrap">
+                                  {comentario.texto}
+                                </p>
+                                
+                                <div className="absolute -bottom-2 right-0 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2 bg-white pl-4">
+                                  <button
+                                    onClick={() => startEditingComentario(comentario)}
+                                    className="text-xs text-slate-400 hover:text-teal-600 flex items-center gap-1 font-semibold transition-colors bg-white px-2 py-1 rounded shadow-sm border border-slate-100"
+                                    title="Editar comentario"
+                                  >
+                                    <FiEdit2 size={12} /> Editar
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
                           </div>
                         </div>
                       );

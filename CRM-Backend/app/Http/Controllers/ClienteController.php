@@ -111,6 +111,20 @@ class ClienteController extends Controller
             'data' => $nuevosClientes
         ], 201);
     }
+    public function show($id) {
+        // Buscamos el cliente y cargamos sus relaciones, incluyendo los comentarios y el agente que hizo cada comentario
+        $cliente = Cliente::with([
+            'user', 
+            'campana', 
+            'estado', 
+            'comentarios' => function($query) {
+                // Ordenamos los comentarios del más antiguo al más reciente y cargamos al usuario
+                $query->orderBy('created_at', 'asc')->with('user');
+            }
+        ])->findOrFail($id);
+
+        return response()->json(['cliente' => $cliente]);
+    }
 
     public function update(Request $request, $id) {
         $request->validate(['nombre' => 'required|string|max:255']);
