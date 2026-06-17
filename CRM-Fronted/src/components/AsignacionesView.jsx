@@ -51,22 +51,68 @@ const AsignacionesView = () => {
   const [filterCampana, setFilterCampana] = useState('');
   const [filterEstado, setFilterEstado] = useState('');
 
+  // NUEVOS ESTADOS DE PAGINACIÓN DEL SERVIDOR
+  const [currentPage, setCurrentPage] = useState(1);
+  const [ultimaPagina, setUltimaPagina] = useState(1);
+  const [totalClientes, setTotalClientes] = useState(0);
+  const [mostrarTodos, setMostrarTodos] = useState(false); // ESTADO PARA VER TODOS
+
   // Listas ordenadas alfabéticamente para los selectores
   const estadosOrdenados = [...estados].sort((a, b) => a.nombre.localeCompare(b.nombre));
   const campanasOrdenadas = [...campanas].sort((a, b) => a.nombre.localeCompare(b.nombre));
   const usuariosOrdenados = [...usuarios].sort((a, b) => a.name.localeCompare(b.name));
 
   useEffect(() => {
-    fetchClientes();
+    fetchClientes(1, false); // Inicia en la página 1 y paginado
     fetchDatosModal();
   }, []);
+  
+  // Disparar la búsqueda en Laravel cada vez que cambiamos un filtro en el dropdown
+  useEffect(() => {
+    // Evitar que busque si solo estamos intentando ordenar alfabéticamente
+    const isSortingAgente = filterAgente.startsWith('sort-');
+    const isSortingCampana = filterCampana.startsWith('sort-');
+    const isSortingEstado = filterEstado.startsWith('sort-');
 
-  const fetchClientes = async () => {
+    if (!isSortingAgente && !isSortingCampana && !isSortingEstado) {
+      fetchClientes(1, mostrarTodos); // Vuelve a la página 1 con los nuevos datos
+    }
+  }, [filterAgente, filterCampana, filterEstado]);
+
+  const fetchClientes = async (page = 1, fetchAll = false) => {
     try {
-      const response = await api.get('/clientes');
-      setClientes(response.data);
+      const params = new URLSearchParams();
+      if (!fetchAll) params.append('page', page);
+      if (fetchAll) params.append('all', 'true');
+      
+      // Adjuntamos los filtros para que Laravel haga el trabajo duro
+      if (filterAgente && filterAgente !== 'sort-asc' && filterAgente !== 'sort-desc') {
+        params.append('agente_id', filterAgente);
+      }
+      if (filterCampana && filterCampana !== 'sort-asc' && filterCampana !== 'sort-desc') {
+        params.append('campana_id', filterCampana);
+      }
+      if (filterEstado && filterEstado !== 'sort-asc' && filterEstado !== 'sort-desc') {
+        params.append('estado_id', filterEstado);
+      }
+
+      const response = await api.get(`/clientes?${params.toString()}`);
+      
+      if (response.data && Array.isArray(response.data.data)) {
+        setClientes(response.data.data);
+        setCurrentPage(response.data.current_page || 1);
+        setUltimaPagina(response.data.last_page || 1);
+        setTotalClientes(response.data.total || 0);
+      } else if (Array.isArray(response.data)) {
+        setClientes(response.data);
+        setTotalClientes(response.data.length);
+      } else {
+        setClientes([]);
+        setTotalClientes(0);
+      }
     } catch (error) {
       console.error("Error al cargar clientes:", error);
+      setClientes([]);
     }
   };
 
@@ -81,11 +127,14 @@ const AsignacionesView = () => {
     }
   };
 
-  const clientesFiltrados = clientes
+  // Filtrado seguro usando Array.isArray
+  const clientesFiltrados = (Array.isArray(clientes) ? clientes : [])
     .filter(cliente => {
+      // AQUÍ AGREGAMOS EL TELÉFONO A LA BÚSQUEDA
       const matchSearch = 
         cliente.nombre?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        cliente.id?.toString().includes(searchTerm);
+        cliente.id?.toString().includes(searchTerm) ||
+        cliente.telefono?.toString().includes(searchTerm);
       
       const matchAgente = (!filterAgente || filterAgente.startsWith('sort-')) ? true : (filterAgente === 'unassigned' ? !cliente.user : cliente.user?.id?.toString() === filterAgente);
       const matchCampana = (!filterCampana || filterCampana.startsWith('sort-')) ? true : (filterCampana === 'unassigned' ? !cliente.campana : cliente.campana?.id?.toString() === filterCampana);
@@ -106,7 +155,8 @@ const AsignacionesView = () => {
       if (sortCliente === 'asc') return (a.nombre || '').localeCompare(b.nombre || '');
       if (sortCliente === 'desc') return (b.nombre || '').localeCompare(a.nombre || '');
 
-      return (b.created_at || b.id) > (a.created_at || a.id) ? 1 : -1;
+      // Invertimos a y b para ordenar cronológicamente (los primeros que entraron salen primero)
+      return (a.created_at || a.id) > (b.created_at || b.id) ? 1 : -1;
     });
 
   const clearFilters = () => {
@@ -170,7 +220,7 @@ const AsignacionesView = () => {
         campana_id: formData.campana_id,
         estado_id: formData.estado_id
       });
-      await fetchClientes(); 
+      await fetchClientes(currentPage, mostrarTodos); // Mantiene el estado de vista actual
       setSelectedIds([]); 
       setIsModalOpen(false);
     } catch (error) {
@@ -195,7 +245,7 @@ const AsignacionesView = () => {
     setIsLoading(true);
     try {
       await api.post('/asignaciones/desasignar', { cliente_ids: idsToUnassign });
-      await fetchClientes();
+      await fetchClientes(currentPage, mostrarTodos); // Mantiene el estado de vista actual
       setSelectedIds([]);
       setIdsToUnassign([]);
       setIsUnassignModalOpen(false);
@@ -246,7 +296,7 @@ const AsignacionesView = () => {
 
       await api.put(`/clientes/${selectedCliente.id}`, payload);
       setSelectedCliente({ ...selectedCliente, ...payload });
-      await fetchClientes(); 
+      await fetchClientes(currentPage, mostrarTodos); 
       setIsEditingInfo(false);
     } catch (error) {
       console.error("Error al actualizar información del cliente:", error);
@@ -270,7 +320,7 @@ const AsignacionesView = () => {
       
       const nuevoEstadoObj = estados.find(e => e.id.toString() === newEstadoId.toString()) || null;
       setSelectedCliente({ ...selectedCliente, estado_id: newEstadoId, estado: nuevoEstadoObj });
-      await fetchClientes(); 
+      await fetchClientes(currentPage, mostrarTodos); 
     } catch (error) {
       console.error("Error al actualizar el estado:", error);
     } finally {
@@ -293,10 +343,7 @@ const AsignacionesView = () => {
     if (!editingComentarioText.trim()) return;
     setIsSavingComentario(true);
     try {
-      // Hacemos la petición pasando el nuevo texto. Laravel actualizará 'updated_at' automáticamente.
       const response = await api.put(`/comentarios/${comentarioId}`, { texto: editingComentarioText });
-      
-      // Actualizamos el comentario en el estado local con la respuesta que incluye el nuevo updated_at
       const updatedComentarioData = response.data.comentario;
       
       const updatedComentarios = selectedCliente.comentarios.map(c => 
@@ -350,10 +397,10 @@ const AsignacionesView = () => {
 
   return (
     <div className="animate-fadeIn w-full relative">
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden w-full relative z-0">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden w-full relative z-0 flex flex-col h-full">
         
         {/* HEADER Y FILTROS */}
-        <div className="p-5 border-b border-slate-200 bg-white w-full flex flex-col gap-4">
+        <div className="p-5 border-b border-slate-200 bg-white w-full flex flex-col gap-4 shrink-0">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
               <h3 className="text-lg font-bold text-slate-900 m-0 flex items-center gap-2">
@@ -363,9 +410,12 @@ const AsignacionesView = () => {
                 </span>
               </h3>
               <p className="text-xs text-slate-500 mt-1.5 font-medium">
-                {hasActiveFilters 
-                  ? `Filtrados: ${clientesFiltrados.length} de ${clientes.length} clientes en total` 
-                  : `Selecciona clientes y asígnalos a tu equipo (${clientes.length} importados)`}
+                {mostrarTodos 
+                  ? "Viendo todos los registros de la base de datos"
+                  : hasActiveFilters 
+                    ? `Filtrados: ${clientesFiltrados.length} clientes en esta página` 
+                    : `Gestión de asignaciones (Página ${currentPage} de ${ultimaPagina})`
+                }
               </p>
             </div>
             
@@ -384,7 +434,8 @@ const AsignacionesView = () => {
           <div className="flex flex-col lg:flex-row gap-3 w-full bg-slate-50/50 p-3 rounded-xl border border-slate-100">
             <div className="relative flex-1 min-w-[180px]">
               <FiSearch className="absolute left-3 top-2.5 text-slate-400 text-lg" />
-              <input type="text" placeholder="Buscar por nombre o ID..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500 box-border"/>
+              {/* AQUÍ CAMBIAMOS EL PLACEHOLDER */}
+              <input type="text" placeholder="Buscar por nombre, ID o teléfono..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500 box-border"/>
             </div>
 
             <select value={sortCliente} onChange={(e) => setSortCliente(e.target.value)} className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 font-medium focus:outline-none focus:ring-2 focus:ring-slate-500 min-w-[140px]">
@@ -437,8 +488,53 @@ const AsignacionesView = () => {
           </div>
         </div>
 
+        {/* CONTROLES DE PAGINACIÓN CONECTADOS AL BACKEND */}
+        <div className="p-3 px-5 border-b border-slate-200 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-4 shrink-0">
+          <div className="flex flex-col sm:flex-row items-center gap-4 text-sm text-slate-500">
+            <div>
+              Mostrando <span className="font-semibold text-slate-700">{clientesFiltrados.length}</span> resultados. 
+              (Total Base de Datos: <span className="font-semibold text-indigo-600">{totalClientes}</span>)
+            </div>
+
+            {/* BOTÓN MÁGICO PARA MOSTRAR TODOS */}
+            <button 
+              onClick={() => {
+                const activar = !mostrarTodos;
+                setMostrarTodos(activar);
+                fetchClientes(1, activar);
+              }}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors border ${mostrarTodos ? 'bg-indigo-100 text-indigo-700 border-indigo-200 shadow-inner' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100 shadow-sm'}`}
+            >
+              {mostrarTodos ? 'Desactivar "Ver Todos"' : 'Ver Todos los Registros'}
+            </button>
+          </div>
+
+          {/* OCULTAMOS ANTERIOR/SIGUIENTE SI ESTAMOS VIENDO TODOS */}
+          {!mostrarTodos && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => fetchClientes(currentPage - 1, false)}
+                disabled={currentPage === 1}
+                className="flex items-center gap-1 px-3 py-1.5 border border-slate-300 rounded-lg text-sm font-medium bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <FiChevronLeft /> Anterior
+              </button>
+              <span className="text-sm font-semibold text-slate-600 px-2">
+                Página {currentPage} de {ultimaPagina}
+              </span>
+              <button
+                onClick={() => fetchClientes(currentPage + 1, false)}
+                disabled={currentPage === ultimaPagina}
+                className="flex items-center gap-1 px-3 py-1.5 border border-slate-300 rounded-lg text-sm font-medium bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Siguiente <FiChevronRight />
+              </button>
+            </div>
+          )}
+        </div>
+
         {/* TABLA DE ASIGNACIONES */}
-        <div className="w-full overflow-x-auto">
+        <div className="w-full overflow-x-auto flex-1">
           <table className="w-full text-left border-collapse min-w-[1000px]">
             <thead>
             <tr className="bg-slate-50 text-slate-500 font-bold text-[11px] uppercase tracking-wider border-b border-slate-200">
@@ -458,7 +554,7 @@ const AsignacionesView = () => {
               {clientesFiltrados.length === 0 ? (
                 <tr>
                   <td colSpan="10" className="text-center p-8 text-slate-400">
-                    {clientes.length === 0 ? 'No hay clientes importados.' : 'No se encontraron clientes con esos filtros o ese orden.'}
+                    {clientes.length === 0 ? 'No hay clientes para mostrar en esta página.' : 'No se encontraron clientes con esos filtros en esta página.'}
                   </td>
                 </tr>
               ) : (

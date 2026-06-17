@@ -9,8 +9,45 @@ use Illuminate\Http\Request;
 
 class ClienteController extends Controller
 {
-    public function index() {
-        return response()->json(Cliente::with(['user', 'campana', 'estado'])->orderBy('id', 'desc')->get());
+    public function index(\Illuminate\Http\Request $request) {
+        $query = Cliente::with(['user', 'campana', 'estado'])->orderBy('id', 'asc');
+
+        // 1. Filtrar por Agente desde el Backend
+        if ($request->filled('agente_id')) {
+            $val = $request->agente_id;
+            if ($val === 'unassigned') {
+                $query->whereNull('user_id');
+            } else if (is_numeric($val)) {
+                $query->where('user_id', $val);
+            }
+        }
+
+        // 2. Filtrar por Campaña desde el Backend
+        if ($request->filled('campana_id')) {
+            $val = $request->campana_id;
+            if ($val === 'unassigned') {
+                $query->whereNull('campana_id');
+            } else if (is_numeric($val)) {
+                $query->where('campana_id', $val);
+            }
+        }
+
+        // 3. Filtrar por Estado desde el Backend
+        if ($request->filled('estado_id')) {
+            $val = $request->estado_id;
+            if ($val === 'unassigned') {
+                $query->whereNull('estado_id');
+            } else if (is_numeric($val)) {
+                $query->where('estado_id', $val);
+            }
+        }
+
+        if ($request->query('all') === 'true') {
+            return response()->json($query->get());
+        }
+
+        // Devolvemos los 500 registros ya filtrados correctamente
+        return response()->json($query->paginate(500));
     }
 
     public function storeMasivo(Request $request) {

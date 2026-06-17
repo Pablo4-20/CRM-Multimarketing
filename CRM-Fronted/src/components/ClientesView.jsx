@@ -16,7 +16,7 @@ const ClientesView = ({ user }) => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   
-  // NUEVO: Estados para el modal de resultados de carga
+  // Estados para el modal de resultados de carga
   const [isResultModalOpen, setIsResultModalOpen] = useState(false);
   const [uploadResult, setUploadResult] = useState({ creados: 0, omitidos_conteo: 0 });
   const [omitidosList, setOmitidosList] = useState([]);       
@@ -38,13 +38,16 @@ const ClientesView = ({ user }) => {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filtroCampana, setFiltroCampana] = useState('');
-  const [sortOrder, setSortOrder] = useState('newest'); 
+  const [sortOrder, setSortOrder] = useState('oldest'); 
 
+  // NUEVOS ESTADOS DE PAGINACIÓN DEL SERVIDOR
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(50); 
+  const [ultimaPagina, setUltimaPagina] = useState(1);
+  const [totalClientes, setTotalClientes] = useState(0);
+  const [mostrarTodos, setMostrarTodos] = useState(false); // ESTADO PARA VER TODOS
 
   useEffect(() => {
-    fetchClientes();
+    fetchClientes(1, false); // Carga la primera página al iniciar
     fetchCampanas();
     
     if (!isSuperAdmin) {
@@ -53,15 +56,42 @@ const ClientesView = ({ user }) => {
     }
   }, [isSuperAdmin]);
 
+  // NUEVO: Pedir nueva data a Laravel cada vez que cambiemos el filtro de campaña
   useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, filtroCampana, sortOrder, itemsPerPage]);
+    fetchClientes(1, mostrarTodos);
+  }, [filtroCampana]);
 
-  const fetchClientes = async () => {
+  // Función actualizada con capacidad de pedir "Todos" y enviar filtros a Laravel
+  const fetchClientes = async (page = 1, fetchAll = false) => {
     try {
-      const response = await api.get('/clientes');
-      setClientes(response.data);
-    } catch (error) { console.error("Error:", error); }
+      const params = new URLSearchParams();
+      if (!fetchAll) params.append('page', page);
+      if (fetchAll) params.append('all', 'true');
+      
+      // Enviamos el filtro a Laravel para que él haga el trabajo pesado antes de paginar
+      if (filtroCampana) {
+        params.append('campana_id', filtroCampana);
+      }
+
+      const response = await api.get(`/clientes?${params.toString()}`);
+      
+      if (response.data && Array.isArray(response.data.data)) {
+        setClientes(response.data.data);
+        setCurrentPage(response.data.current_page || 1);
+        setUltimaPagina(response.data.last_page || 1);
+        setTotalClientes(response.data.total || 0);
+      } else if (Array.isArray(response.data)) {
+        setClientes(response.data);
+        setTotalClientes(response.data.length);
+      } else {
+        console.warn("Formato inesperado del backend:", response.data);
+        setClientes([]);
+        setTotalClientes(0);
+      }
+    } catch (error) { 
+      console.error("Error al cargar clientes:", error);
+      setClientes([]); 
+    }
   };
 
   const fetchCampanas = async () => {
@@ -164,19 +194,18 @@ const ClientesView = ({ user }) => {
 
         if (clientesAEnviar.length > 0) {
           const response = await api.post('/clientes/masivo', { clientes: clientesAEnviar });
-          await fetchClientes(); 
+          await fetchClientes(1, mostrarTodos); // Recargamos manteniendo el estado
           if (isSuperAdmin) await fetchCampanas(); 
           
-          // Guardar resultados para el modal de resumen
           setUploadResult({
             creados: response.data.creados,
             omitidos_conteo: response.data.omitidos_conteo
           });
           setOmitidosList(response.data.omitidos || []);
           
-          setIsUploadModalOpen(false); // Cierra el modal de carga
+          setIsUploadModalOpen(false); 
           setSelectedFile(null);
-          setIsResultModalOpen(true);  // Abre el modal de resultados
+          setIsResultModalOpen(true);  
 
         } else {
           setImportError("El archivo Excel está vacío o le falta la columna 'Nombre'.");
@@ -214,7 +243,7 @@ const ClientesView = ({ user }) => {
     setIsLoading(true);
     try {
       await api.put(`/clientes/${editingId}`, formData);
-      await fetchClientes();
+      await fetchClientes(currentPage, mostrarTodos); 
       setIsEditModalOpen(false);
     } catch (error) {
       console.error("Error al editar:", error);
@@ -228,7 +257,7 @@ const ClientesView = ({ user }) => {
     setIsLoading(true);
     try {
       await api.delete(`/clientes/${clienteToDelete.id}`);
-      await fetchClientes();
+      await fetchClientes(currentPage, mostrarTodos); 
       setIsDeleteModalOpen(false);
       setClienteToDelete(null);
     } catch (error) {
@@ -241,16 +270,18 @@ const ClientesView = ({ user }) => {
   const limpiarFiltros = () => {
     setSearchTerm('');
     setFiltroCampana('');
-    setSortOrder('newest'); 
+    setSortOrder('oldest'); 
   };
 
-  const clientesFiltrados = clientes.filter(cliente => {
+  const clientesFiltrados = (Array.isArray(clientes) ? clientes : []).filter(cliente => {
     const searchLower = searchTerm.toLowerCase();
     const matchTexto = 
       (cliente.nombre && cliente.nombre.toLowerCase().includes(searchLower)) ||
       (cliente.telefono && cliente.telefono.includes(searchTerm)) ||
-      (cliente.id && cliente.id.toString().includes(searchTerm)); // <-- BUSQUEDA POR ID
+      (cliente.id && cliente.id.toString().includes(searchTerm));
 
+    // El filtrado por campaña ahora se hace en el backend, pero mantenemos esto
+    // por seguridad para la vista local.
     const matchCampana = filtroCampana ? 
       (cliente.campana?.id.toString() === filtroCampana.toString() || cliente.campana_id?.toString() === filtroCampana.toString()) 
       : true;
@@ -265,12 +296,6 @@ const ClientesView = ({ user }) => {
     if (sortOrder === 'oldest') return a.id - b.id;
     return 0;
   });
-
-  const isAll = itemsPerPage === 'all';
-  const indexOfLastItem = isAll ? clientesOrdenados.length : currentPage * itemsPerPage;
-  const indexOfFirstItem = isAll ? 0 : indexOfLastItem - itemsPerPage;
-  const currentItems = clientesOrdenados.slice(indexOfFirstItem, indexOfLastItem);
-  const totalPages = isAll ? 1 : Math.ceil(clientesOrdenados.length / itemsPerPage);
 
   return (
     <div className="animate-fadeIn w-full">
@@ -288,7 +313,7 @@ const ClientesView = ({ user }) => {
               <FiSearch className="absolute left-3 top-2.5 text-slate-400 text-lg" />
               <input 
                 type="text" 
-                placeholder="Buscar nombre, número o ID..." 
+                placeholder={mostrarTodos ? "Buscar en toda la base..." : "Buscar en esta página..."} 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 box-border"
@@ -320,7 +345,7 @@ const ClientesView = ({ user }) => {
               <FiChevronDown className="absolute right-3 top-2.5 text-slate-500 pointer-events-none" />
             </div>
 
-            {(searchTerm !== '' || filtroCampana !== '' || sortOrder !== 'newest') && (
+            {(searchTerm !== '' || filtroCampana !== '' || sortOrder !== 'oldest') && (
               <button 
                 onClick={limpiarFiltros}
                 className="flex items-center justify-center gap-1.5 px-3 py-2 bg-red-50 text-red-600 hover:bg-red-100 border border-red-100 rounded-lg text-sm font-semibold transition-colors shrink-0"
@@ -339,43 +364,43 @@ const ClientesView = ({ user }) => {
           </div>
         </div>
 
-        {/* CONTROLES DE PAGINACIÓN */}
+        {/* CONTROLES DE PAGINACIÓN CONECTADOS AL BACKEND */}
         <div className="p-3 px-5 border-b border-slate-200 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-4 shrink-0">
           <div className="flex flex-col sm:flex-row items-center gap-4 text-sm text-slate-500">
             <div>
-              Mostrando <span className="font-semibold text-slate-700">{clientesOrdenados.length === 0 ? 0 : indexOfFirstItem + 1}</span> a <span className="font-semibold text-slate-700">{Math.min(indexOfLastItem, clientesOrdenados.length)}</span> de <span className="font-semibold text-slate-700">{clientesOrdenados.length}</span> clientes
+              Mostrando <span className="font-semibold text-slate-700">{clientesOrdenados.length}</span> resultados{mostrarTodos ? '.' : ' en esta página.'} 
+              (Total Base de Datos: <span className="font-semibold text-indigo-600">{totalClientes}</span>)
             </div>
-            
-            <div className="flex items-center gap-2 border-l border-slate-300 pl-4">
-              <span className="font-medium text-slate-600">Mostrar:</span>
-              <select
-                value={itemsPerPage}
-                onChange={(e) => setItemsPerPage(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-                className="bg-white border border-slate-300 text-slate-700 text-xs rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-1.5 outline-none cursor-pointer"
-              >
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-                <option value={100}>100</option>
-                <option value="all">Todos</option>
-              </select>
-            </div>
+
+            {/* BOTÓN MÁGICO PARA MOSTRAR TODOS */}
+            <button 
+              onClick={() => {
+                const activar = !mostrarTodos;
+                setMostrarTodos(activar);
+                fetchClientes(1, activar);
+              }}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors border ${mostrarTodos ? 'bg-indigo-100 text-indigo-700 border-indigo-200 shadow-inner' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100 shadow-sm'}`}
+            >
+              {mostrarTodos ? 'Desactivar "Ver Todos"' : 'Ver Todos los Registros'}
+            </button>
           </div>
 
-          {!isAll && totalPages > 1 && (
+          {/* OCULTAMOS ANTERIOR/SIGUIENTE SI ESTAMOS VIENDO TODOS */}
+          {!mostrarTodos && (
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                onClick={() => fetchClientes(currentPage - 1, false)}
                 disabled={currentPage === 1}
                 className="flex items-center gap-1 px-3 py-1.5 border border-slate-300 rounded-lg text-sm font-medium bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 <FiChevronLeft /> Anterior
               </button>
               <span className="text-sm font-semibold text-slate-600 px-2">
-                Página {currentPage} de {totalPages}
+                Página {currentPage} de {ultimaPagina}
               </span>
               <button
-                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                disabled={currentPage === totalPages}
+                onClick={() => fetchClientes(currentPage + 1, false)}
+                disabled={currentPage === ultimaPagina}
                 className="flex items-center gap-1 px-3 py-1.5 border border-slate-300 rounded-lg text-sm font-medium bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 Siguiente <FiChevronRight />
@@ -399,9 +424,9 @@ const ClientesView = ({ user }) => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
-              {currentItems.length === 0 ? (
-                <tr><td colSpan="7" className="text-center p-8 text-slate-400">No se encontraron clientes con esos filtros.</td></tr>
-              ) : currentItems.map((cliente) => (
+              {clientesOrdenados.length === 0 ? (
+                <tr><td colSpan="7" className="text-center p-8 text-slate-400">No hay clientes para mostrar.</td></tr>
+              ) : clientesOrdenados.map((cliente) => (
                 <tr key={cliente.id} className="hover:bg-slate-50/80 transition-colors group">
                   <td className="p-4 pl-6 font-mono text-xs font-bold text-slate-400">
                     #{cliente.id}
@@ -463,11 +488,8 @@ const ClientesView = ({ user }) => {
             </tbody>
           </table>
         </div>
-
       </div>
 
-      {/* MODALES */}
-      
       {/* MODAL: RESUMEN DE RESULTADOS DE IMPORTACIÓN */}
       {isResultModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-fadeIn">
