@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { 
   FiSearch, FiCheckSquare, FiX, FiUsers, FiTag, FiVolume2, FiUser,
   FiEdit2, FiUserMinus, FiPhone, FiMail, FiEdit3, FiSave, FiCalendar, 
-  FiMessageSquare, FiStar, FiCheckCircle, FiChevronLeft, FiChevronRight
+  FiMessageSquare, FiStar, FiCheckCircle, FiChevronLeft, FiChevronRight,
+  FiTrash2, FiAlertCircle // <-- NUEVO ÍCONO PARA ALERTAS
 } from 'react-icons/fi';
 import api from '../api';
 
@@ -15,6 +16,16 @@ const AsignacionesView = () => {
   const [isUnassignModalOpen, setIsUnassignModalOpen] = useState(false);
   const [idsToUnassign, setIdsToUnassign] = useState([]); 
   
+  // ================= SISTEMA DE ALERTAS Y CONFIRMACIONES =================
+  const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+  const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', onConfirm: null, type: 'danger' });
+
+  const showToast = (message, type = 'success') => {
+    setToast({ show: true, message, type });
+    setTimeout(() => setToast({ show: false, message: '', type: '' }), 3500);
+  };
+  // =========================================================================
+
   // ================= MODAL FICHA DE CLIENTE =================
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedCliente, setSelectedCliente] = useState(null);
@@ -63,19 +74,17 @@ const AsignacionesView = () => {
   const usuariosOrdenados = [...usuarios].sort((a, b) => a.name.localeCompare(b.name));
 
   useEffect(() => {
-    fetchClientes(1, false); // Inicia en la página 1 y paginado
+    fetchClientes(1, false); 
     fetchDatosModal();
   }, []);
   
-  // Disparar la búsqueda en Laravel cada vez que cambiamos un filtro en el dropdown
   useEffect(() => {
-    // Evitar que busque si solo estamos intentando ordenar alfabéticamente
     const isSortingAgente = filterAgente.startsWith('sort-');
     const isSortingCampana = filterCampana.startsWith('sort-');
     const isSortingEstado = filterEstado.startsWith('sort-');
 
     if (!isSortingAgente && !isSortingCampana && !isSortingEstado) {
-      fetchClientes(1, mostrarTodos); // Vuelve a la página 1 con los nuevos datos
+      fetchClientes(1, mostrarTodos); 
     }
   }, [filterAgente, filterCampana, filterEstado]);
 
@@ -85,7 +94,6 @@ const AsignacionesView = () => {
       if (!fetchAll) params.append('page', page);
       if (fetchAll) params.append('all', 'true');
       
-      // Adjuntamos los filtros para que Laravel haga el trabajo duro
       if (filterAgente && filterAgente !== 'sort-asc' && filterAgente !== 'sort-desc') {
         params.append('agente_id', filterAgente);
       }
@@ -113,6 +121,7 @@ const AsignacionesView = () => {
     } catch (error) {
       console.error("Error al cargar clientes:", error);
       setClientes([]);
+      showToast('Error al cargar la base de datos', 'error');
     }
   };
 
@@ -127,10 +136,8 @@ const AsignacionesView = () => {
     }
   };
 
-  // Filtrado seguro usando Array.isArray
   const clientesFiltrados = (Array.isArray(clientes) ? clientes : [])
     .filter(cliente => {
-      // AQUÍ AGREGAMOS EL TELÉFONO A LA BÚSQUEDA
       const matchSearch = 
         cliente.nombre?.toLowerCase().includes(searchTerm.toLowerCase()) || 
         cliente.id?.toString().includes(searchTerm) ||
@@ -155,7 +162,6 @@ const AsignacionesView = () => {
       if (sortCliente === 'asc') return (a.nombre || '').localeCompare(b.nombre || '');
       if (sortCliente === 'desc') return (b.nombre || '').localeCompare(a.nombre || '');
 
-      // Invertimos a y b para ordenar cronológicamente (los primeros que entraron salen primero)
       return (a.created_at || a.id) > (b.created_at || b.id) ? 1 : -1;
     });
 
@@ -220,11 +226,13 @@ const AsignacionesView = () => {
         campana_id: formData.campana_id,
         estado_id: formData.estado_id
       });
-      await fetchClientes(currentPage, mostrarTodos); // Mantiene el estado de vista actual
+      await fetchClientes(currentPage, mostrarTodos); 
       setSelectedIds([]); 
       setIsModalOpen(false);
+      showToast('Asignación procesada y guardada exitosamente.', 'success');
     } catch (error) {
       console.error("Error en la asignación:", error);
+      showToast('Ocurrió un error al procesar la asignación.', 'error');
     } finally {
       setIsLoading(false);
     }
@@ -245,12 +253,14 @@ const AsignacionesView = () => {
     setIsLoading(true);
     try {
       await api.post('/asignaciones/desasignar', { cliente_ids: idsToUnassign });
-      await fetchClientes(currentPage, mostrarTodos); // Mantiene el estado de vista actual
+      await fetchClientes(currentPage, mostrarTodos); 
       setSelectedIds([]);
       setIdsToUnassign([]);
       setIsUnassignModalOpen(false);
+      showToast('Las asignaciones fueron removidas con éxito.', 'success');
     } catch (error) {
       console.error("Error al remover asignaciones:", error);
+      showToast('Error al intentar remover asignaciones.', 'error');
     } finally {
       setIsLoading(false);
     }
@@ -286,23 +296,35 @@ const AsignacionesView = () => {
 
   const handleSaveInfo = async (e) => {
     e.preventDefault();
-    setIsSavingInfo(true);
-    try {
-      const payload = {
-        nombre: editFormData.nombre,
-        email: editFormData.email,
-        telefono: editFormData.telefono
-      };
-
-      await api.put(`/clientes/${selectedCliente.id}`, payload);
-      setSelectedCliente({ ...selectedCliente, ...payload });
-      await fetchClientes(currentPage, mostrarTodos); 
-      setIsEditingInfo(false);
-    } catch (error) {
-      console.error("Error al actualizar información del cliente:", error);
-    } finally {
-      setIsSavingInfo(false);
-    }
+    
+    // Modal de confirmación para guardar cambios en los datos del cliente
+    setConfirmDialog({
+      isOpen: true,
+      title: '¿Guardar Cambios?',
+      message: 'Estás a punto de actualizar la información de contacto de este cliente.',
+      type: 'info',
+      onConfirm: async () => {
+        setIsSavingInfo(true);
+        setConfirmDialog({ ...confirmDialog, isOpen: false });
+        try {
+          const payload = {
+            nombre: editFormData.nombre,
+            email: editFormData.email,
+            telefono: editFormData.telefono
+          };
+          await api.put(`/clientes/${selectedCliente.id}`, payload);
+          setSelectedCliente({ ...selectedCliente, ...payload });
+          await fetchClientes(currentPage, mostrarTodos); 
+          setIsEditingInfo(false);
+          showToast('Información del cliente actualizada correctamente.', 'success');
+        } catch (error) {
+          console.error("Error al actualizar información del cliente:", error);
+          showToast('Error al guardar la información.', 'error');
+        } finally {
+          setIsSavingInfo(false);
+        }
+      }
+    });
   };
 
   const handleDirectStateChange = async (newEstadoId) => {
@@ -321,14 +343,16 @@ const AsignacionesView = () => {
       const nuevoEstadoObj = estados.find(e => e.id.toString() === newEstadoId.toString()) || null;
       setSelectedCliente({ ...selectedCliente, estado_id: newEstadoId, estado: nuevoEstadoObj });
       await fetchClientes(currentPage, mostrarTodos); 
+      showToast('Estado del cliente modificado exitosamente.', 'success');
     } catch (error) {
       console.error("Error al actualizar el estado:", error);
+      showToast('Ocurrió un error al cambiar el estado.', 'error');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // ================= FUNCIONES PARA EDITAR COMENTARIOS =================
+  // ================= FUNCIONES PARA EDITAR / BORRAR COMENTARIOS =================
   const startEditingComentario = (comentario) => {
     setEditingComentarioId(comentario.id);
     setEditingComentarioText(comentario.texto);
@@ -353,11 +377,38 @@ const AsignacionesView = () => {
       setSelectedCliente({ ...selectedCliente, comentarios: updatedComentarios });
       setEditingComentarioId(null);
       setEditingComentarioText('');
+      showToast('El comentario ha sido editado y guardado.', 'success');
     } catch (error) {
       console.error("Error al actualizar el comentario:", error);
+      showToast('Error al intentar editar el comentario.', 'error');
     } finally {
       setIsSavingComentario(false);
     }
+  };
+
+  // NUEVA FUNCIÓN PARA BORRAR COMENTARIOS CON MODAL PERSONALIZADO
+  const handleDeleteComentario = (comentarioId) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: '¿Eliminar Gestión?',
+      message: '¿Estás seguro de que deseas eliminar permanentemente este comentario o gestión? Esta acción no se puede deshacer.',
+      type: 'danger',
+      onConfirm: async () => {
+        setIsLoadingComentarios(true);
+        setConfirmDialog({ ...confirmDialog, isOpen: false });
+        try {
+          await api.delete(`/comentarios/${comentarioId}`);
+          const updatedComentarios = selectedCliente.comentarios.filter(c => c.id !== comentarioId);
+          setSelectedCliente({ ...selectedCliente, comentarios: updatedComentarios });
+          showToast('Registro eliminado correctamente.', 'success');
+        } catch (error) {
+          console.error("Error al eliminar el comentario:", error);
+          showToast('Ocurrió un error al intentar eliminar el registro.', 'error');
+        } finally {
+          setIsLoadingComentarios(false);
+        }
+      }
+    });
   };
 
   const verificarCitaPendiente = (texto) => {
@@ -397,6 +448,56 @@ const AsignacionesView = () => {
 
   return (
     <div className="animate-fadeIn w-full relative">
+      
+      {/* ================= TOAST NOTIFICATION ================= */}
+      {toast.show && (
+        <div className={`fixed bottom-6 right-6 z-[80] flex items-center gap-3 px-5 py-4 rounded-xl shadow-2xl border animate-slideUp transition-all ${
+          toast.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 
+          toast.type === 'error' ? 'bg-red-50 border-red-200 text-red-800' : 
+          'bg-blue-50 border-blue-200 text-blue-800'
+        }`}>
+          {toast.type === 'success' ? <FiCheckCircle size={22} className="text-emerald-500" /> : <FiAlertCircle size={22} className="text-red-500" />}
+          <p className="text-sm font-bold">{toast.message}</p>
+          <button onClick={() => setToast({...toast, show: false})} className="ml-3 text-slate-400 hover:text-slate-700 transition-colors">
+            <FiX size={18}/>
+          </button>
+        </div>
+      )}
+
+      {/* ================= MODAL DE CONFIRMACIÓN CUSTOM ================= */}
+      {confirmDialog.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[90] p-4 animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-100 w-full max-w-sm overflow-hidden animate-slideUp">
+            <div className="p-6 text-center">
+              <div className={`w-16 h-16 rounded-full flex items-center justify-center text-3xl mb-4 shadow-sm mx-auto border ${
+                confirmDialog.type === 'danger' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-teal-50 text-teal-600 border-teal-100'
+              }`}>
+                {confirmDialog.type === 'danger' ? <FiTrash2 /> : <FiSave />}
+              </div>
+              <h3 className="text-xl font-bold text-slate-900 m-0">{confirmDialog.title}</h3>
+              <p className="text-sm text-slate-500 mt-2 font-medium">{confirmDialog.message}</p>
+            </div>
+            <div className="p-5 bg-slate-50 border-t border-slate-100 flex gap-3">
+              <button 
+                onClick={() => setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null })} 
+                className="flex-1 p-2.5 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold rounded-xl text-sm transition-colors"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={confirmDialog.onConfirm} 
+                className={`flex-1 p-2.5 font-bold rounded-xl text-sm transition-colors text-white shadow-sm ${
+                  confirmDialog.type === 'danger' ? 'bg-red-600 hover:bg-red-700' : 'bg-teal-600 hover:bg-teal-700'
+                }`}
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= INTERFAZ PRINCIPAL ================= */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden w-full relative z-0 flex flex-col h-full">
         
         {/* HEADER Y FILTROS */}
@@ -434,7 +535,6 @@ const AsignacionesView = () => {
           <div className="flex flex-col lg:flex-row gap-3 w-full bg-slate-50/50 p-3 rounded-xl border border-slate-100">
             <div className="relative flex-1 min-w-[180px]">
               <FiSearch className="absolute left-3 top-2.5 text-slate-400 text-lg" />
-              {/* AQUÍ CAMBIAMOS EL PLACEHOLDER */}
               <input type="text" placeholder="Buscar por nombre, ID o teléfono..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500 box-border"/>
             </div>
 
@@ -496,7 +596,6 @@ const AsignacionesView = () => {
               (Total Base de Datos: <span className="font-semibold text-indigo-600">{totalClientes}</span>)
             </div>
 
-            {/* BOTÓN MÁGICO PARA MOSTRAR TODOS */}
             <button 
               onClick={() => {
                 const activar = !mostrarTodos;
@@ -509,7 +608,6 @@ const AsignacionesView = () => {
             </button>
           </div>
 
-          {/* OCULTAMOS ANTERIOR/SIGUIENTE SI ESTAMOS VIENDO TODOS */}
           {!mostrarTodos && (
             <div className="flex items-center gap-2">
               <button
@@ -757,6 +855,31 @@ const AsignacionesView = () => {
                   Agendar Cita
                 </button>
 
+                <label 
+                  className={`mt-1 w-full flex items-center justify-between px-4 py-3 border rounded-xl cursor-pointer transition-all shadow-sm ${
+                    selectedIds.includes(selectedCliente.id) 
+                      ? 'bg-slate-800 border-slate-900 text-white' 
+                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 font-bold text-sm">
+                    <FiCheckSquare size={18} className={selectedIds.includes(selectedCliente.id) ? 'text-white' : 'text-slate-400'} />
+                    {selectedIds.includes(selectedCliente.id) ? 'Cliente Seleccionado' : 'Seleccionar para Asignar'}
+                  </div>
+                  <input 
+                    type="checkbox" 
+                    checked={selectedIds.includes(selectedCliente.id)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedIds(prev => [...prev, selectedCliente.id]);
+                      } else {
+                        setSelectedIds(prev => prev.filter(id => id !== selectedCliente.id));
+                      }
+                    }}
+                    className="w-5 h-5 rounded border-slate-300 text-slate-800 focus:ring-slate-800 cursor-pointer"
+                  />
+                </label>
+
                 {/* BOTONES DE NAVEGACIÓN ANTERIOR / SIGUIENTE */}
                 <div className="grid grid-cols-2 gap-3 mt-1">
                   <button 
@@ -900,6 +1023,7 @@ const AsignacionesView = () => {
                                   {comentario.texto}
                                 </p>
                                 
+                                {/* BOTONES DE EDICIÓN Y BORRADO */}
                                 <div className="absolute -bottom-2 right-0 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2 bg-white pl-4">
                                   <button
                                     onClick={() => startEditingComentario(comentario)}
@@ -907,6 +1031,13 @@ const AsignacionesView = () => {
                                     title="Editar comentario"
                                   >
                                     <FiEdit2 size={12} /> Editar
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteComentario(comentario.id)}
+                                    className="text-xs text-slate-400 hover:text-red-600 flex items-center gap-1 font-semibold transition-colors bg-white px-2 py-1 rounded shadow-sm border border-slate-100"
+                                    title="Borrar comentario"
+                                  >
+                                    <FiTrash2 size={12} /> Borrar
                                   </button>
                                 </div>
                               </div>

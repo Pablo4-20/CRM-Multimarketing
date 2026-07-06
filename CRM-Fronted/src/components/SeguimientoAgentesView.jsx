@@ -26,7 +26,7 @@ const SeguimientoAgentesView = ({ user }) => {
   const [agentes, setAgentes] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   
-  // NUEVO ESTADO: ORDENAMIENTO
+  // ESTADO: ORDENAMIENTO
   const [orden, setOrden] = useState('');
   
   // Estados para el Modal Principal
@@ -41,6 +41,15 @@ const SeguimientoAgentesView = ({ user }) => {
   const [editText, setEditText] = useState('');
   const [comentarioToDelete, setComentarioToDelete] = useState(null);
   const [isDeleteComentarioModalOpen, setIsDeleteComentarioModalOpen] = useState(false);
+
+  // ESTADO: ALERTA (TOAST)
+  const [alerta, setAlerta] = useState(null);
+
+  // Función para mostrar alertas temporalmente
+  const mostrarAlerta = (tipo, mensaje) => {
+    setAlerta({ tipo, mensaje });
+    setTimeout(() => setAlerta(null), 3000);
+  };
 
   useEffect(() => {
     fetchAgentes();
@@ -79,7 +88,11 @@ const SeguimientoAgentesView = ({ user }) => {
           : c
       ));
       setEditingComentarioId(null);
-    } catch (error) { console.error("Error al editar:", error); }
+      mostrarAlerta('success', 'Gestión actualizada correctamente');
+    } catch (error) { 
+      console.error("Error al editar:", error); 
+      mostrarAlerta('error', 'Error al actualizar la gestión');
+    }
   };
 
   // Confirmar eliminación del comentario
@@ -90,7 +103,11 @@ const SeguimientoAgentesView = ({ user }) => {
       setActividad(prev => prev.filter(c => c.id !== comentarioToDelete.id));
       setIsDeleteComentarioModalOpen(false);
       setComentarioToDelete(null);
-    } catch (error) { console.error("Error al eliminar:", error); }
+      mostrarAlerta('success', 'Registro eliminado permanentemente');
+    } catch (error) { 
+      console.error("Error al eliminar:", error); 
+      mostrarAlerta('error', 'Error al eliminar el registro');
+    }
   };
 
   // LÓGICA DE FILTRADO Y ORDENAMIENTO COMBINADA
@@ -105,14 +122,14 @@ const SeguimientoAgentesView = ({ user }) => {
       if (orden === 'reciente') {
         return b.created_at && a.created_at 
           ? new Date(b.created_at) - new Date(a.created_at) 
-          : b.id - a.id; // Usa el ID como respaldo si no hay fecha
+          : b.id - a.id; 
       }
       if (orden === 'antiguo') {
         return a.created_at && b.created_at 
           ? new Date(a.created_at) - new Date(b.created_at) 
-          : a.id - b.id; // Usa el ID como respaldo si no hay fecha
+          : a.id - b.id; 
       }
-      return 0; // Sin orden específico
+      return 0;
     });
 
   const comentariosNormales = actividad.filter(c => !c.texto?.includes('📅 Cita agendada'));
@@ -396,6 +413,31 @@ const SeguimientoAgentesView = ({ user }) => {
               <button onClick={handleConfirmDeleteComentario} className="flex-1 py-2 px-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-xs shadow-sm">Confirmar y Eliminar</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* COMPONENTE FLOTANTE DE ALERTA (TOAST) - AHORA SUPERIOR */}
+      {alerta && (
+        <div className={`fixed top-6 right-6 z-[200] flex items-center gap-3 px-5 py-4 rounded-xl shadow-2xl border animate-fadeIn transition-all duration-300 ${
+          alerta.tipo === 'success' 
+            ? 'bg-emerald-50 border-emerald-200 text-emerald-800' 
+            : 'bg-red-50 border-red-200 text-red-800'
+        }`}>
+          <div className={`flex items-center justify-center w-8 h-8 rounded-full ${
+            alerta.tipo === 'success' ? 'bg-emerald-100' : 'bg-red-100'
+          }`}>
+            {alerta.tipo === 'success' 
+              ? <FiCheckCircle size={18} className="text-emerald-600" /> 
+              : <FiAlertTriangle size={18} className="text-red-600" />
+            }
+          </div>
+          <p className="text-sm font-bold m-0">{alerta.mensaje}</p>
+          <button 
+            onClick={() => setAlerta(null)} 
+            className="ml-4 opacity-50 hover:opacity-100 transition-opacity"
+          >
+            <FiX size={16} />
+          </button>
         </div>
       )}
 

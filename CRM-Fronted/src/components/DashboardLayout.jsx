@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import HomeView from './HomeView';
@@ -12,7 +12,19 @@ import SeguimientoAgentesView from './SeguimientoAgentesView';
 
 const DashboardLayout = ({ onLogout, user }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [activeTab, setActiveTab] = useState('inicio');
+  
+  // ================= CAMBIO AQUÍ =================
+  // 1. Leemos el localStorage al cargar por primera vez
+  const [activeTab, setActiveTab] = useState(() => {
+    const savedTab = localStorage.getItem('activeTabCRM');
+    return savedTab ? savedTab : 'inicio';
+  });
+
+  // 2. Guardamos en el localStorage cada vez que activeTab cambie
+  useEffect(() => {
+    localStorage.setItem('activeTabCRM', activeTab);
+  }, [activeTab]);
+  // ===============================================
 
   const toggleSidebar = () => setIsCollapsed(!isCollapsed);
 
