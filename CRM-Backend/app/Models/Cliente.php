@@ -16,7 +16,14 @@ class Cliente extends Model
         'campana_id', 
         'estado_id', 
         'user_id', 
-        'notas'
+        'notas',
+        'fecha_asignacion',    
+        'fecha_reasignacion'
+    ];
+
+    protected $casts = [
+        'fecha_asignacion' => 'datetime',
+        'fecha_reasignacion' => 'datetime',
     ];
 
     public function campana() { 

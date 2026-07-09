@@ -3,7 +3,7 @@ import {
   FiSearch, FiCheckSquare, FiX, FiUsers, FiTag, FiVolume2, FiUser,
   FiEdit2, FiUserMinus, FiPhone, FiMail, FiEdit3, FiSave, FiCalendar, 
   FiMessageSquare, FiStar, FiCheckCircle, FiChevronLeft, FiChevronRight,
-  FiTrash2, FiAlertCircle // <-- NUEVO ÍCONO PARA ALERTAS
+  FiTrash2, FiAlertCircle 
 } from 'react-icons/fi';
 import api from '../api';
 
@@ -39,8 +39,8 @@ const AsignacionesView = () => {
   
   // Estados para la columna derecha del modal (Comentarios y Citas)
   const [activeTab, setActiveTab] = useState('gestion');
+  const [busquedaComentario, setBusquedaComentario] = useState(''); 
   const comentariosEndRef = useRef(null);
-  const [isAgendarModalOpen, setIsAgendarModalOpen] = useState(false);
   const [isLoadingComentarios, setIsLoadingComentarios] = useState(false);
 
   // Estados para edición de comentarios
@@ -66,7 +66,7 @@ const AsignacionesView = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [ultimaPagina, setUltimaPagina] = useState(1);
   const [totalClientes, setTotalClientes] = useState(0);
-  const [mostrarTodos, setMostrarTodos] = useState(false); // ESTADO PARA VER TODOS
+  const [mostrarTodos, setMostrarTodos] = useState(false);
 
   // Listas ordenadas alfabéticamente para los selectores
   const estadosOrdenados = [...estados].sort((a, b) => a.nombre.localeCompare(b.nombre));
@@ -87,6 +87,17 @@ const AsignacionesView = () => {
       fetchClientes(1, mostrarTodos); 
     }
   }, [filterAgente, filterCampana, filterEstado]);
+
+  // EFECTO PARA AUTO-SCROLL AL ÚLTIMO COMENTARIO
+  useEffect(() => {
+    if (isDetailModalOpen && comentariosEndRef.current) {
+      // Un pequeño timeout asegura que el DOM ya se pintó antes de hacer scroll
+      const timeout = setTimeout(() => {
+        comentariosEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 150);
+      return () => clearTimeout(timeout);
+    }
+  }, [isDetailModalOpen, selectedCliente?.comentarios, activeTab, busquedaComentario]);
 
   const fetchClientes = async (page = 1, fetchAll = false) => {
     try {
@@ -162,7 +173,10 @@ const AsignacionesView = () => {
       if (sortCliente === 'asc') return (a.nombre || '').localeCompare(b.nombre || '');
       if (sortCliente === 'desc') return (b.nombre || '').localeCompare(a.nombre || '');
 
-      return (a.created_at || a.id) > (b.created_at || b.id) ? 1 : -1;
+      // AQUÍ SE ORDENA POR FECHA DE ÚLTIMA MODIFICACIÓN (los más recientes primero)
+      const dateA = new Date(a.updated_at || a.created_at || a.id).getTime();
+      const dateB = new Date(b.updated_at || b.created_at || b.id).getTime();
+      return dateB - dateA;
     });
 
   const clearFilters = () => {
@@ -230,6 +244,12 @@ const AsignacionesView = () => {
       setSelectedIds([]); 
       setIsModalOpen(false);
       showToast('Asignación procesada y guardada exitosamente.', 'success');
+      
+      // Si el modal de detalle está abierto y modificamos ese cliente específico, lo refrescamos
+      if (isDetailModalOpen && selectedCliente && selectedIds.includes(selectedCliente.id)) {
+        openDetailModal({id: selectedCliente.id});
+      }
+
     } catch (error) {
       console.error("Error en la asignación:", error);
       showToast('Ocurrió un error al procesar la asignación.', 'error');
@@ -268,24 +288,26 @@ const AsignacionesView = () => {
 
   // ======================= LÓGICA FICHA DE CLIENTE =======================
   
-  const openDetailModal = async (cliente) => {
-    setSelectedCliente(cliente);
-    setEditFormData({
-      nombre: cliente.nombre || '',
-      email: cliente.email || cliente.correo || '',
-      telefono: cliente.telefono || ''
-    });
+  const openDetailModal = async (clienteToLoad) => {
+    // Si viene de la tabla tiene datos basicos, si viene de refresco puede ser solo el ID
+    setSelectedCliente(clienteToLoad);
     setIsEditingInfo(false);
     setIsEditingEstado(false); 
     setActiveTab('gestion');
+    setBusquedaComentario(''); 
     setIsDetailModalOpen(true);
     setIsLoadingComentarios(true);
 
     try {
-      const response = await api.get(`/clientes/${cliente.id}`);
+      const response = await api.get(`/clientes/${clienteToLoad.id}`);
       const dataClienteCompleto = response.data.cliente || response.data;
       if (dataClienteCompleto) {
         setSelectedCliente(prev => ({ ...prev, ...dataClienteCompleto }));
+        setEditFormData({
+          nombre: dataClienteCompleto.nombre || '',
+          email: dataClienteCompleto.email || dataClienteCompleto.correo || '',
+          telefono: dataClienteCompleto.telefono || ''
+        });
       }
     } catch (error) {
       console.error("Error al cargar el historial del cliente:", error);
@@ -297,7 +319,6 @@ const AsignacionesView = () => {
   const handleSaveInfo = async (e) => {
     e.preventDefault();
     
-    // Modal de confirmación para guardar cambios en los datos del cliente
     setConfirmDialog({
       isOpen: true,
       title: '¿Guardar Cambios?',
@@ -386,7 +407,6 @@ const AsignacionesView = () => {
     }
   };
 
-  // NUEVA FUNCIÓN PARA BORRAR COMENTARIOS CON MODAL PERSONALIZADO
   const handleDeleteComentario = (comentarioId) => {
     setConfirmDialog({
       isOpen: true,
@@ -417,7 +437,9 @@ const AsignacionesView = () => {
     return txt.includes('agendada') || txt.includes('pendiente') || txt.includes('programada');
   };
 
-  const getStatusBadge = (estado) => {
+  const getStatusBadge = (estado, texto = '') => {
+    if (texto.includes('Asignado a:')) return "bg-indigo-100 text-indigo-700 border-indigo-200 border";
+    
     if (!estado) return "bg-slate-100 text-slate-700";
     const est = estado.toLowerCase();
     if (est.includes('pendiente') || est.includes('agendada')) return "bg-amber-100 text-amber-700";
@@ -426,10 +448,26 @@ const AsignacionesView = () => {
     return "bg-slate-100 text-slate-700";
   };
 
-  const comentarios = selectedCliente?.comentarios || [];
+  const comentarios = [...(selectedCliente?.comentarios || [])].sort((a, b) => {
+    const dateA = a.created_at ? new Date(a.created_at) : new Date(0);
+    const dateB = b.created_at ? new Date(b.created_at) : new Date(0);
+    return dateA - dateB; 
+  });
+
   const comentariosNormales = comentarios.filter(c => c.tipo !== 'cita' && !c.es_cita);
   const historialCitas = comentarios.filter(c => c.tipo === 'cita' || c.es_cita);
   const datosPestañaActual = activeTab === 'gestion' ? comentariosNormales : historialCitas;
+
+  // LÓGICA DE FILTRADO PARA COMENTARIOS
+  const datosMostrados = datosPestañaActual.filter(c => {
+    if (!busquedaComentario) return true;
+    const searchLower = busquedaComentario.toLowerCase();
+    return (
+      c.texto?.toLowerCase().includes(searchLower) ||
+      c.user?.name?.toLowerCase().includes(searchLower) ||
+      (c.estado && c.estado.toLowerCase().includes(searchLower))
+    );
+  });
 
   const isAllFilteredSelected = clientesFiltrados.length > 0 && clientesFiltrados.every(c => selectedIds.includes(c.id));
   const hasActiveFilters = searchTerm || sortCliente || filterAgente || filterCampana || filterEstado;
@@ -633,7 +671,7 @@ const AsignacionesView = () => {
 
         {/* TABLA DE ASIGNACIONES */}
         <div className="w-full overflow-x-auto flex-1">
-          <table className="w-full text-left border-collapse min-w-[1000px]">
+          <table className="w-full text-left border-collapse min-w-[1100px]">
             <thead>
             <tr className="bg-slate-50 text-slate-500 font-bold text-[11px] uppercase tracking-wider border-b border-slate-200">
               <th className="p-4 w-12 text-center"><input type="checkbox" onChange={handleSelectAll} checked={isAllFilteredSelected} className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" /></th>
@@ -645,13 +683,14 @@ const AsignacionesView = () => {
               <th className="p-4">Campaña</th>
               <th className="p-4">Estado</th>
               <th className="p-4">Fecha de Creación</th>
+              <th className="p-4">Última Modificación</th>
               <th className="p-4 text-center w-28">Acciones</th>
             </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
               {clientesFiltrados.length === 0 ? (
                 <tr>
-                  <td colSpan="10" className="text-center p-8 text-slate-400">
+                  <td colSpan="11" className="text-center p-8 text-slate-400">
                     {clientes.length === 0 ? 'No hay clientes para mostrar en esta página.' : 'No se encontraron clientes con esos filtros en esta página.'}
                   </td>
                 </tr>
@@ -695,6 +734,18 @@ const AsignacionesView = () => {
                     <td className="p-4 text-sm text-slate-600 font-medium">
                       {cliente.created_at 
                         ? new Date(cliente.created_at).toLocaleDateString('es-ES', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })
+                        : <span className="text-slate-400 italic">Sin fecha</span>
+                      }
+                    </td>
+                    <td className="p-4 text-sm text-slate-600 font-medium">
+                      {cliente.updated_at 
+                        ? new Date(cliente.updated_at).toLocaleDateString('es-ES', {
                             day: '2-digit',
                             month: '2-digit',
                             year: 'numeric',
@@ -847,13 +898,20 @@ const AsignacionesView = () => {
                   </div>
                 </div>
 
-                <button 
-                  onClick={() => setIsAgendarModalOpen(true)}
-                  className="mt-2 w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 hover:border-indigo-300 rounded-xl font-bold transition-all shadow-sm"
-                >
-                  <FiCalendar size={18} />
-                  Agendar Cita
-                </button>
+                {/* ================= AGENTE ACTUAL ================= */}
+                <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h4 className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+                        <FiUser/> Agente Actual
+                      </h4>
+                      <p className="text-indigo-900 font-bold text-base">
+                        {selectedCliente.user ? selectedCliente.user.name : <span className="text-indigo-400 font-medium italic text-sm">Sin asignar</span>}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                {/* ====================================================================== */}
 
                 <label 
                   className={`mt-1 w-full flex items-center justify-between px-4 py-3 border rounded-xl cursor-pointer transition-all shadow-sm ${
@@ -923,21 +981,47 @@ const AsignacionesView = () => {
                   </button>
                 </div>
 
+                {/* ================= NUEVO INPUT DE BÚSQUEDA ================= */}
+                <div className="px-6 pt-4 shrink-0">
+                  <div className="relative">
+                    <FiSearch className="absolute left-3 top-2.5 text-slate-400 text-lg" />
+                    <input 
+                      type="text" 
+                      placeholder={activeTab === 'gestion' ? "Buscar asignación, agente, gestión..." : "Buscar en citas..."}
+                      value={busquedaComentario}
+                      onChange={(e) => setBusquedaComentario(e.target.value)}
+                      className="w-full pl-10 pr-10 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 shadow-sm transition-shadow"
+                    />
+                    {busquedaComentario && (
+                      <button 
+                        onClick={() => setBusquedaComentario('')} 
+                        className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-700 transition-colors"
+                        title="Limpiar búsqueda"
+                      >
+                        <FiX size={18} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {/* =========================================================== */}
+
                 <div className="flex-1 p-6 overflow-y-auto flex flex-col gap-4 bg-slate-50 min-h-[300px]">
                   {isLoadingComentarios ? ( 
                     <div className="m-auto text-center text-slate-400">
                       <p className="text-sm font-medium animate-pulse">Cargando historial...</p>
                     </div>
-                  ) : datosPestañaActual.length === 0 ? (
+                  ) : datosMostrados.length === 0 ? (
                     <div className="m-auto text-center text-slate-400 flex flex-col items-center gap-2">
                       {activeTab === 'gestion' ? <FiMessageSquare size={32} className="opacity-20" /> : <FiCalendar size={32} className="opacity-20" />}
                       <p className="text-sm">
-                        {activeTab === 'gestion' ? 'No hay gestiones registradas aún.' : 'No hay citas agendadas para este cliente.'}
+                        {busquedaComentario 
+                          ? 'No se encontraron resultados para tu búsqueda.' 
+                          : (activeTab === 'gestion' ? 'No hay gestiones registradas aún.' : 'No hay citas agendadas para este cliente.')}
                       </p>
                     </div>
                   ) : (
-                    datosPestañaActual.map((comentario, index) => {
-                      const agentName = comentario.user?.name || 'Agente';
+                    datosMostrados.map((comentario, index) => {
+                      const agentName = comentario.user?.name || 'Sistema';
                       const initials = agentName.substring(0, 2).toUpperCase();
                       const dateObj = comentario.created_at ? new Date(comentario.created_at) : new Date();
                       const formattedDate = dateObj.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -959,17 +1043,17 @@ const AsignacionesView = () => {
                       return (
                         <div key={comentario.id || index} className="flex gap-3 animate-fadeIn">
                           <div className="flex-shrink-0">
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow-sm border ${isCita ? 'bg-indigo-100 text-indigo-700 border-indigo-50' : 'bg-teal-100 text-teal-700 border-teal-50'}`}>
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow-sm border ${isCita ? 'bg-indigo-100 text-indigo-700 border-indigo-50' : (comentario.estado === 'Sistema' ? 'bg-slate-200 text-slate-700 border-slate-300' : 'bg-teal-100 text-teal-700 border-teal-50')}`}>
                               {initials}
                             </div>
                           </div>
 
-                          <div className={`flex-1 bg-white border rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow ${isCita ? 'border-indigo-100' : 'border-slate-200'}`}>
+                          <div className={`flex-1 bg-white border rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow ${isCita ? 'border-indigo-100' : (comentario.estado === 'Sistema' ? 'border-slate-300 bg-slate-50/50' : 'border-slate-200')}`}>
                             <div className="flex justify-between items-start">
                               <div>
                                 <h4 className="text-base font-bold text-slate-900">{agentName}</h4>
                                 
-                                <span className={`mt-1.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider ${getStatusBadge(comentario.estado)}`}>
+                                <span className={`mt-1.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider ${getStatusBadge(comentario.estado, comentario.texto)}`}>
                                   {isCita && (
                                     esPendiente 
                                       ? <FiStar className="text-amber-500 animate-pulse" size={14} /> 
@@ -1019,27 +1103,29 @@ const AsignacionesView = () => {
                               </div>
                             ) : (
                               <div className="group relative">
-                                <p className="mt-4 text-base text-slate-800 leading-relaxed whitespace-pre-wrap">
+                                <p className="mt-4 text-base text-slate-800 leading-relaxed whitespace-pre-wrap font-medium">
                                   {comentario.texto}
                                 </p>
                                 
-                                {/* BOTONES DE EDICIÓN Y BORRADO */}
-                                <div className="absolute -bottom-2 right-0 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2 bg-white pl-4">
-                                  <button
-                                    onClick={() => startEditingComentario(comentario)}
-                                    className="text-xs text-slate-400 hover:text-teal-600 flex items-center gap-1 font-semibold transition-colors bg-white px-2 py-1 rounded shadow-sm border border-slate-100"
-                                    title="Editar comentario"
-                                  >
-                                    <FiEdit2 size={12} /> Editar
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteComentario(comentario.id)}
-                                    className="text-xs text-slate-400 hover:text-red-600 flex items-center gap-1 font-semibold transition-colors bg-white px-2 py-1 rounded shadow-sm border border-slate-100"
-                                    title="Borrar comentario"
-                                  >
-                                    <FiTrash2 size={12} /> Borrar
-                                  </button>
-                                </div>
+                                {/* BOTONES DE EDICIÓN Y BORRADO (Ocultos para logs del sistema) */}
+                                {comentario.estado !== 'Sistema' && (
+                                  <div className="absolute -bottom-2 right-0 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2 bg-white pl-4">
+                                    <button
+                                      onClick={() => startEditingComentario(comentario)}
+                                      className="text-xs text-slate-400 hover:text-teal-600 flex items-center gap-1 font-semibold transition-colors bg-white px-2 py-1 rounded shadow-sm border border-slate-100"
+                                      title="Editar comentario"
+                                    >
+                                      <FiEdit2 size={12} /> Editar
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteComentario(comentario.id)}
+                                      className="text-xs text-slate-400 hover:text-red-600 flex items-center gap-1 font-semibold transition-colors bg-white px-2 py-1 rounded shadow-sm border border-slate-100"
+                                      title="Borrar comentario"
+                                    >
+                                      <FiTrash2 size={12} /> Borrar
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             )}
 
@@ -1048,6 +1134,7 @@ const AsignacionesView = () => {
                       );
                     })
                   )}
+                  {/* Este div invisible nos permite hacer el scroll al fondo */}
                   <div ref={comentariosEndRef} />
                 </div>
               </div>

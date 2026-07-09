@@ -25,15 +25,50 @@ class AsignacionController extends Controller
             'estado_id' => 'nullable|exists:estados,id',
         ]);
 
-        // Solo preparamos para actualizar los campos que el usuario SÍ envió
-        $updateData = [];
-        if ($request->filled('user_id')) $updateData['user_id'] = $request->user_id;
-        if ($request->filled('campana_id')) $updateData['campana_id'] = $request->campana_id;
-        if ($request->filled('estado_id')) $updateData['estado_id'] = $request->estado_id;
+        $clientes = Cliente::whereIn('id', $request->cliente_ids)->get();
+        $nuevoAgente = null;
 
-        // Si hay algo que actualizar, lo hacemos
-        if (!empty($updateData)) {
-            Cliente::whereIn('id', $request->cliente_ids)->update($updateData);
+        if ($request->filled('user_id')) {
+            $nuevoAgente = User::find($request->user_id);
+        }
+
+        foreach ($clientes as $cliente) {
+            // Si se envió un nuevo agente y es diferente al que ya tenía
+            if ($nuevoAgente && $request->user_id != $cliente->user_id) {
+                
+                $fechaActual = date('d/m/Y');
+                $textoHistorial = "";
+
+                if (is_null($cliente->user_id)) {
+                    // Primera asignación
+                    $textoHistorial = "Asignado a: " . $nuevoAgente->name . " Fecha: " . $fechaActual;
+                } else {
+                    // Reasignación (agregamos quién lo tenía antes para mayor control)
+                    $agenteAnterior = User::find($cliente->user_id);
+                    $nombreAnterior = $agenteAnterior ? $agenteAnterior->name : 'Desconocido';
+                    $textoHistorial = "Asignado a: " . $nuevoAgente->name . " Fecha: " . $fechaActual . "\n(Agente anterior: " . $nombreAnterior . ")";
+                }
+
+                // Creamos el comentario automático
+                \App\Models\Comentario::create([
+                    'cliente_id' => $cliente->id,
+                    'user_id' => auth()->id() ?? 1, // ID del administrador que hace el cambio
+                    'texto' => $textoHistorial,
+                    'estado' => 'Sistema' // Etiqueta especial
+                ]);
+
+                // Guardamos el nuevo agente en el cliente
+                $cliente->user_id = $request->user_id;
+            }
+
+            if ($request->filled('campana_id')) {
+                $cliente->campana_id = $request->campana_id;
+            }
+            if ($request->filled('estado_id')) {
+                $cliente->estado_id = $request->estado_id;
+            }
+
+            $cliente->save();
         }
 
         return response()->json(['message' => 'Clientes asignados correctamente']);
